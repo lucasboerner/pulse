@@ -9,6 +9,12 @@ doctrine:
         # Capturing a PHP backtrace per query is pure dev overhead that scales
         # with query count; disabled so profiled timings reflect real DB cost.
         profiling_collect_backtrace: false
+
+        # messenger_messages is created by Messenger's auto_setup and is not a
+        # mapped entity. Excluding it here keeps it out of schema diffs, so
+        # make:migration never tries to drop or recreate it and
+        # doctrine:schema:validate ignores it.
+        schema_filter: ~^(?!messenger_messages)~
     orm:
         validate_xml_mapping: true
         naming_strategy: doctrine.orm.naming_strategy.underscore
