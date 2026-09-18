@@ -15,6 +15,9 @@ framework:
         # stays unrouted so the scheduler consumer handles it where it is received.
         routing:
             App\Message\RunCheck: async
+            # Alert mail off the check loop: an SMTP outage delays notifications
+            # without blocking the worker that drains RunCheck.
+            App\Message\NotifyIncident: async
 
 when@test:
     framework:
