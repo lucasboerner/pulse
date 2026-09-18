@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
 use App\Enum\CheckStatus;
 use App\Enum\MonitorType;
 use App\Repository\MonitorRepository;
@@ -27,9 +31,10 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * history stays. There is deliberately no failure counter — an incident opens on
  * the first failure, so there is nothing to count.
  *
- * The GetCollection operation here is the minimal authenticated read this phase
- * verifies. Phase 2 replaces it with the full operation set, validation and its own
- * state provider and processor.
+ * Reads exclude soft-deleted rows through the global Gedmo query filter; writes
+ * go through one state class per operation under App\State. The read group is on
+ * every property; the write group is only on the columns a client may set — the
+ * check pipeline owns nextCheckAt, lastCheckedAt, lastStatus and region.
  */
 #[ORM\Entity(repositoryClass: MonitorRepository::class)]
 #[ORM\Table(name: 'monitor')]
@@ -38,8 +43,15 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[Gedmo\SoftDeleteable(fieldName: 'deletedAt')]
 #[ApiResource(
     shortName: 'Monitor',
-    operations: [new GetCollection()],
+    operations: [
+        new GetCollection(),
+        new Get(),
+        new Post(),
+        new Patch(),
+        new Delete(),
+    ],
     normalizationContext: ['groups' => ['monitor:read']],
+    denormalizationContext: ['groups' => ['monitor:write']],
 )]
 class Monitor
 {
@@ -48,31 +60,31 @@ class Monitor
     use SoftDeleteableEntity;
 
     #[ORM\Column(type: Types::STRING, length: 120)]
-    #[Groups(['monitor:read'])]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private string $name;
 
     #[ORM\Column(type: Types::STRING, length: 2048)]
-    #[Groups(['monitor:read'])]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private string $url;
 
     #[ORM\Column(type: Types::STRING, length: 32, enumType: MonitorType::class, options: ['default' => MonitorType::Http->value])]
-    #[Groups(['monitor:read'])]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private MonitorType $type = MonitorType::Http;
 
     #[ORM\Column(type: Types::INTEGER, options: ['default' => 60])]
-    #[Groups(['monitor:read'])]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private int $intervalSeconds = 60;
 
     #[ORM\Column(type: Types::INTEGER, options: ['default' => 8000])]
-    #[Groups(['monitor:read'])]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private int $timeoutMs = 8000;
 
     #[ORM\Column(type: Types::SMALLINT, nullable: true)]
-    #[Groups(['monitor:read'])]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private ?int $expectedStatusCode = null;
 
     #[ORM\Column(type: Types::BOOLEAN, options: ['default' => true])]
-    #[Groups(['monitor:read'])]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private bool $enabled = true;
 
     /**
@@ -100,7 +112,8 @@ class Monitor
 
     #[ORM\ManyToOne(targetEntity: MonitorGroup::class)]
     #[ORM\JoinColumn(name: 'monitor_group_id', nullable: true, onDelete: 'SET NULL')]
-    private ?MonitorGroup $group = null;
+    #[Groups(['monitor:read', 'monitor:write'])]
+    private ?MonitorGroup $monitorGroup = null;
 
     /**
      * The alert recipient list. Owned here: alert mail goes to these rows and
@@ -112,6 +125,7 @@ class Monitor
     #[ORM\JoinTable(name: 'monitor_subscriber')]
     #[ORM\JoinColumn(name: 'monitor_id', onDelete: 'CASCADE')]
     #[ORM\InverseJoinColumn(name: 'user_id', onDelete: 'CASCADE')]
+    #[Groups(['monitor:read', 'monitor:write'])]
     private Collection $subscribers;
 
     public function __construct()
@@ -252,14 +266,14 @@ class Monitor
         return $this;
     }
 
-    public function getGroup(): ?MonitorGroup
+    public function getMonitorGroup(): ?MonitorGroup
     {
-        return $this->group;
+        return $this->monitorGroup;
     }
 
-    public function setGroup(?MonitorGroup $group): self
+    public function setMonitorGroup(?MonitorGroup $monitorGroup): self
     {
-        $this->group = $group;
+        $this->monitorGroup = $monitorGroup;
 
         return $this;
     }
