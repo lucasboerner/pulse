@@ -8,15 +8,21 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\Monitor;
 use App\Entity\User;
+use App\Message\RunCheck;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 /**
- * Subscribes the creating operator, then persists. The Object Mapper's input
- * processor has already mapped the resource onto a Monitor entity by the time this
- * runs, so it receives the entity and adds the operator before the decorated
- * Doctrine persist processor writes the row and its subscriber join rows in one
- * transaction.
+ * Subscribes the creating operator, persists, then dispatches the first check. The
+ * Object Mapper's input processor has already mapped the resource onto a Monitor
+ * entity by the time this runs, so it receives the entity and adds the operator
+ * before the decorated Doctrine persist processor writes the row and its subscriber
+ * join rows in one transaction.
+ *
+ * The first check runs on creation rather than on the next scheduler tick, so a new
+ * monitor has a result within a second — only when it is enabled, since a disabled
+ * monitor is never checked.
  *
  * A client-supplied subscriber list is kept and the creator added to it; a monitor
  * with no other subscribers is still valid — it checks and opens incidents, it just
@@ -33,6 +39,7 @@ final readonly class MonitorCreateProcessor implements ProcessorInterface
         #[Autowire(service: 'api_platform.doctrine.orm.state.persist_processor')]
         private ProcessorInterface $persistProcessor,
         private Security $security,
+        private MessageBusInterface $bus,
     ) {
     }
 
@@ -44,6 +51,12 @@ final readonly class MonitorCreateProcessor implements ProcessorInterface
         \assert($operator instanceof User);
         $data->addSubscriber($operator);
 
-        return $this->persistProcessor->process($data, $operation, $uriVariables, $context);
+        $monitor = $this->persistProcessor->process($data, $operation, $uriVariables, $context);
+
+        if (true === $monitor->isEnabled()) {
+            $this->bus->dispatch(new RunCheck((string) $monitor->getId()));
+        }
+
+        return $monitor;
     }
 }
