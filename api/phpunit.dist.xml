@@ -33,7 +33,11 @@
         <!-- ###- symfony/messenger ### -->
 
         <!-- ###+ symfony/mailer ### -->
-        <env name="MAILER_DSN" value="null://null"/>
+        <!-- force="true": the dev/worker containers set a real MAILER_DSN
+             (smtp://mailpit:1025) in their environment, which would otherwise win
+             over this file and make the suite reach Mailpit over the network. The
+             null transport keeps every mail assertion working while sending nothing. -->
+        <env name="MAILER_DSN" value="null://null" force="true"/>
         <!-- ###- symfony/mailer ### -->
 
         <!-- ###+ symfony/framework-bundle ### -->

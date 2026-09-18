@@ -14,7 +14,7 @@
 #
 #   APP_SECRET
 #   POSTGRES_DB  POSTGRES_USER  POSTGRES_PASSWORD
-#   MAILER_DSN
+#   MAILER_DSN  MAILER_FROM
 #   CORS_ALLOW_ORIGIN  APP_FRONTEND_URL  DEFAULT_URI
 #   MERCURE_JWT_SECRET
 #
@@ -35,9 +35,11 @@ x-api-env: &api-env
   APP_FRONTEND_URL: ${APP_FRONTEND_URL}
   DEFAULT_URI: ${DEFAULT_URI}
   CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN}
-  # Mail — the self-hosting stack has no mail sink, so a real transport is
-  # required (no default).
+  # Mail — the self-hosting stack has no mail sink, so a real transport and a
+  # sender address are required (no defaults). MAILER_FROM is the default From
+  # header on every message.
   MAILER_DSN: ${MAILER_DSN}
+  MAILER_FROM: ${MAILER_FROM}
   # Mercure hub — api/worker publish server-side to MERCURE_URL (internal name);
   # the browser subscribes to MERCURE_PUBLIC_URL, served same-origin as the
   # frontend so the operator's proxy fronts it at <frontend>/.well-known/mercure.

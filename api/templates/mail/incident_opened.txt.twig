@@ -1,0 +1,11 @@
+{{ monitorName }} is down.
+
+Pulse could not reach it on its last check.
+
+Monitor:     {{ monitorName }}
+URL:         {{ monitorUrl }}
+Reason:      {{ cause|default('No reason reported.') }}
+Down since:  {{ startedAt|date('Y-m-d H:i:s e') }}
+
+Open the monitor in Pulse:
+{{ link }}

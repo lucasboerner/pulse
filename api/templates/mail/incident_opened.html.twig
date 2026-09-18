@@ -1,0 +1,12 @@
+<p><strong>{{ monitorName }}</strong> is down.</p>
+
+<p>Pulse could not reach it on its last check.</p>
+
+<ul>
+    <li>Monitor: {{ monitorName }}</li>
+    <li>URL: {{ monitorUrl }}</li>
+    <li>Reason: {{ cause|default('No reason reported.') }}</li>
+    <li>Down since: {{ startedAt|date('Y-m-d H:i:s e') }}</li>
+</ul>
+
+<p><a href="{{ link }}">Open the monitor in Pulse</a></p>

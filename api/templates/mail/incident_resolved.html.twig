@@ -1,0 +1,13 @@
+<p><strong>{{ monitorName }}</strong> is back up.</p>
+
+<p>Pulse reached it again on its last check.</p>
+
+<ul>
+    <li>Monitor: {{ monitorName }}</li>
+    <li>URL: {{ monitorUrl }}</li>
+    <li>Down from: {{ startedAt|date('Y-m-d H:i:s e') }}</li>
+    <li>Recovered: {{ endedAt|date('Y-m-d H:i:s e') }}</li>
+    <li>Outage duration: {{ duration }}</li>
+</ul>
+
+<p><a href="{{ link }}">Open the monitor in Pulse</a></p>

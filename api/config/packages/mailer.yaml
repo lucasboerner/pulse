@@ -1,3 +1,9 @@
 framework:
     mailer:
         dsn: '%env(MAILER_DSN)%'
+        # Default From on every message, rather than repeating it on each send. A
+        # worker has no signed-in operator to attribute the mail to, so the sender
+        # is instance configuration; MAILER_FROM defaults to a neutral no-reply
+        # address and the operator overrides it.
+        headers:
+            from: '%env(MAILER_FROM)%'
