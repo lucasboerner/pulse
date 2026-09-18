@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
 use App\Repository\UserRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Timestampable\Traits\TimestampableEntity;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 /**
  * An operator account, created only by the app:user:create console command.
@@ -18,19 +22,30 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * go and is never a login field. There is deliberately no registration, no password
  * reset and no role column: every account can do everything, so getRoles() is a
  * constant.
+ *
+ * Read-only over the API: a client lists and reads operators so it can reference
+ * them as monitor subscribers. Accounts are still created only by the console
+ * command — there is no write operation here.
  */
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: '`user`')]
 #[ORM\UniqueConstraint(name: 'uniq_user_email', columns: ['email'])]
+#[ApiResource(
+    shortName: 'User',
+    operations: [new GetCollection(), new Get()],
+    normalizationContext: ['groups' => ['user:read']],
+)]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     use EntityIdTrait;
     use TimestampableEntity;
 
     #[ORM\Column(type: Types::STRING, length: 64, unique: true)]
+    #[Groups(['user:read'])]
     private string $username;
 
     #[ORM\Column(type: Types::STRING, length: 180)]
+    #[Groups(['user:read'])]
     private string $email;
 
     #[ORM\Column(type: Types::STRING, length: 255)]
