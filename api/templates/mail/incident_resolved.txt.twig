@@ -1,0 +1,12 @@
+{{ monitorName }} is back up.
+
+Pulse reached it again on its last check.
+
+Monitor:          {{ monitorName }}
+URL:              {{ monitorUrl }}
+Down from:        {{ startedAt|date('Y-m-d H:i:s e') }}
+Recovered:        {{ endedAt|date('Y-m-d H:i:s e') }}
+Outage duration:  {{ duration }}
+
+Open the monitor in Pulse:
+{{ link }}
