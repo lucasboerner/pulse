@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend quality + tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: ctype, iconv, intl, pdo_sqlite, opcache, apcu
+          coverage: none
+
+      # Installs from composer.lock and caches vendor/ keyed on the lock hash.
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+        with:
+          working-directory: api
+
+      # No explicit DB setup: the suite runs on SQLite (var/test.db) and Foundry's
+      # ResetDatabase trait creates the database + schema from entity metadata before
+      # the first test. The Doctrine migrations are PostgreSQL-shaped and must not be
+      # run here (they fail on SQLite).
+
+      - name: PHP CS Fixer (dry-run)
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+        env:
+          PHP_CS_FIXER_IGNORE_ENV: 1
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit
+
+  frontend:
+    name: Frontend quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: app/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Type-check
+        run: yarn typecheck
+
+      - name: Build
+        run: yarn build

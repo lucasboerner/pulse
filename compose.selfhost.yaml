@@ -1,0 +1,169 @@
+# Pulse — self-hosting stack.
+#
+# Pulls the published images from the GitHub Container Registry, so a stranger
+# can run the whole thing with no build toolchain on their machine:
+#
+#   docker compose -f compose.selfhost.yaml up -d
+#
+# The self-hoster runs their own reverse proxy (TLS termination) in front of the
+# published host ports — the project does not ship one.
+#
+# Set these environment variables first — put them in a `.env` file next to this
+# one, or in the shell environment. None have secret defaults; the operator must
+# supply them. See .env.example for what each one is.
+#
+#   APP_SECRET
+#   POSTGRES_DB  POSTGRES_USER  POSTGRES_PASSWORD
+#   MAILER_DSN
+#   CORS_ALLOW_ORIGIN  APP_FRONTEND_URL  DEFAULT_URI
+#   MERCURE_JWT_SECRET
+#
+# Optional overrides (sensible defaults shown): APP_PORT (3000), API_PORT (8080),
+# MERCURE_PORT (3001), IMAGE_TAG (latest).
+
+x-api-env: &api-env
+  APP_ENV: prod
+  APP_DEBUG: "0"
+  APP_SECRET: ${APP_SECRET}
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?serverVersion=${POSTGRES_VERSION:-16}&charset=${POSTGRES_CHARSET:-utf8}
+  # Messenger runs on the Doctrine transport — no Redis, no separate broker.
+  MESSENGER_TRANSPORT_DSN: doctrine://default?auto_setup=0
+  # Behind the operator's reverse proxy → FrankenPHP: trust the upstream so
+  # scheme/client-IP are correct.
+  SYMFONY_TRUSTED_PROXIES: REMOTE_ADDR
+  # App URLs / CORS — deployment-specific, no defaults; the operator sets these.
+  APP_FRONTEND_URL: ${APP_FRONTEND_URL}
+  DEFAULT_URI: ${DEFAULT_URI}
+  CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN}
+  # Mail — the self-hosting stack has no mail sink, so a real transport is
+  # required (no default).
+  MAILER_DSN: ${MAILER_DSN}
+  # Mercure hub — api/worker publish server-side to MERCURE_URL (internal name);
+  # the browser subscribes to MERCURE_PUBLIC_URL, served same-origin as the
+  # frontend so the operator's proxy fronts it at <frontend>/.well-known/mercure.
+  # MERCURE_JWT_SECRET signs the tokens and must match the hub's keys (mercure
+  # service below); no default. The publishing code and subscriber cookie arrive
+  # in later phases.
+  MERCURE_URL: http://mercure/.well-known/mercure
+  MERCURE_PUBLIC_URL: ${APP_FRONTEND_URL}/.well-known/mercure
+  MERCURE_JWT_SECRET: ${MERCURE_JWT_SECRET}
+
+services:
+  api:
+    image: ghcr.io/lucasboerner/pulse-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      # Serve plain HTTP on :80; the operator's reverse proxy terminates TLS in
+      # front of the published API_PORT.
+      SERVER_NAME: ":80"
+      CADDY_GLOBAL_OPTIONS: "auto_https off"
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8080}:80"
+    volumes:
+      - api_data:/data
+      - api_config:/config
+
+  # Drains the async work queue (App\Message\*). Same image + env as api;
+  # --time-limit recycles it hourly. api owns the boot-time migration, so this
+  # container opts out (SKIP_MIGRATIONS) and waits for api to be healthy.
+  worker:
+    image: ghcr.io/lucasboerner/pulse-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      # api owns the boot-time migration; every other container that shares the
+      # image must opt out or they race. See api/frankenphp/docker-entrypoint.sh.
+      SKIP_MIGRATIONS: "1"
+    command: php bin/console messenger:consume async --time-limit=3600 -v
+    # The image HEALTHCHECK probes Caddy's admin socket (:2019), which only
+    # exists when the container runs frankenphp — a messenger:consume process
+    # would report unhealthy forever, so the check is disabled here.
+    healthcheck:
+      disable: true
+    depends_on:
+      database:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  # Symfony Scheduler — consumes the `scheduler_default` transport so commands
+  # declared on a #[AsSchedule] provider fire on cron.
+  #
+  # COMMENTED OUT ON PURPOSE: `messenger:consume scheduler_default` exits with an
+  # error (and the container crash-loops) while no Schedule provider exists.
+  # Uncomment once you add one — e.g. src/Scheduler/MainSchedule.php with
+  # #[AsSchedule] — and mirror it into compose.yaml.
+  #
+  # scheduler:
+  #   image: ghcr.io/lucasboerner/pulse-api:${IMAGE_TAG:-latest}
+  #   restart: unless-stopped
+  #   environment:
+  #     <<: *api-env
+  #     SKIP_MIGRATIONS: "1"
+  #   command: php bin/console messenger:consume scheduler_default --time-limit=3600 -v
+  #   healthcheck:
+  #     disable: true # image HEALTHCHECK probes Caddy — see worker
+  #   depends_on:
+  #     database:
+  #       condition: service_healthy
+  #     api:
+  #       condition: service_healthy
+
+  app:
+    image: ghcr.io/lucasboerner/pulse-app:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Server Components reach the API over the internal Docker network, not a
+      # public hostname — the browser never calls the API for data.
+      API_INTERNAL_URL: http://api
+      # Where the browser subscribes for live updates (phase 5 wires the client).
+      MERCURE_PUBLIC_URL: ${APP_FRONTEND_URL}/.well-known/mercure
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+  # Mercure hub — the SSE server the worker publishes check results / incident
+  # transitions to and the open page subscribes to (phase 3 publishes, phase 5
+  # subscribes). Serves plain HTTP on :80 (SERVER_NAME ':80' turns off Caddy
+  # auto-TLS); the operator's reverse proxy terminates TLS in front of the
+  # published MERCURE_PORT and routes <frontend>/.well-known/mercure to it.
+  mercure:
+    image: dunglas/mercure
+    restart: unless-stopped
+    environment:
+      SERVER_NAME: ":80"
+      # Must equal MERCURE_JWT_SECRET in x-api-env; no default.
+      MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_JWT_SECRET}
+      MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_JWT_SECRET}
+      # Let the configured frontend origin subscribe (phase 5).
+      MERCURE_EXTRA_DIRECTIVES: |
+        cors_origins ${APP_FRONTEND_URL}
+    ports:
+      - "${MERCURE_PORT:-3001}:80"
+
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "${POSTGRES_DB}", "-U", "${POSTGRES_USER}"]
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    volumes:
+      - database_data:/var/lib/postgresql/data
+
+volumes:
+  api_data:
+  api_config:
+  database_data:

@@ -1,0 +1,25 @@
+api_platform:
+    title: Pulse API
+    version: 1.0.0
+    enable_swagger_ui: false
+    enable_re_doc: false
+    enable_scalar: true
+    formats:
+        json: ['application/json']
+        jsonapi: ['application/vnd.api+json']
+    # jsonld is disabled (see formats above), so it must not be the error
+    # fallback either — otherwise a failed vnd.api+json request can't negotiate
+    # an error format and crashes on "Serialization for the format jsonld is not
+    # supported" instead of returning a proper 422.
+    error_formats:
+        jsonapi: ['application/vnd.api+json']
+        json: ['application/problem+json', 'application/json']
+    defaults:
+        stateless: true
+        cache_headers:
+            vary: ['Content-Type', 'Authorization', 'Origin']
+        # Let trusted callers pull a whole reference collection in one request
+        # (?itemsPerPage=N) instead of walking dozens of 20-row pages. The
+        # maximum caps any single page so it can't be abused.
+        pagination_client_items_per_page: true
+        pagination_maximum_items_per_page: 2000

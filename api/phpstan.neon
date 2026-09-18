@@ -1,0 +1,18 @@
+parameters:
+    level: 8
+    paths:
+        - src
+    symfony:
+        containerXmlPath: var/cache/dev/App_KernelDevDebugContainer.xml
+    # The two ignores below are structural: phpstan-doctrine flags every nullable
+    # entity property whose Doctrine column/association is non-nullable, which is
+    # the normal shape for an entity built by setters. They must not fail the run
+    # just because the project has no entity of that kind yet.
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        -
+            identifier: doctrine.columnType
+            path: src/Entity/*
+        -
+            identifier: doctrine.associationType
+            path: src/Entity/*

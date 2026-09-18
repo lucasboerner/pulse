@@ -1,0 +1,28 @@
+# API rate limiting. Cache-backed (the auto-provisioned `cache.rate_limiter`
+# pool) — no database, no migration.
+#
+# NOTE: these limiters are configuration only. Nothing consumes them until you
+# add a listener that picks a limiter per request and calls ->consume(). Which
+# limiter applies is an auth question (per authenticated user vs. per client IP),
+# so wire that up when you add authentication.
+#
+# Why two buckets: with a server-rendered frontend every API call reaches Symfony
+# from a single container, so per-IP limiting would lump all users into one
+# bucket. The real limit therefore keys on the authenticated user identifier; the
+# per-IP limiter only guards anonymous endpoints.
+framework:
+    rate_limiter:
+        # Per authenticated user. Generous on purpose: one server-rendered page
+        # can fan out many reads, so the ceiling must clear normal use with
+        # headroom while still stopping a runaway client or scraper.
+        authenticated_api:
+            policy: sliding_window
+            limit: 1000
+            interval: '1 minute'
+        # Per client IP, for unauthenticated traffic only. Behind an SSR proxy
+        # this collapses to the frontend container, so treat it as a coarse cap
+        # on total anonymous volume rather than a targeted brute-force guard.
+        anonymous_api:
+            policy: sliding_window
+            limit: 60
+            interval: '1 minute'

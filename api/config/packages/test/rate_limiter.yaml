@@ -1,0 +1,10 @@
+# Effectively disable API rate limiting under test: the limiter counters live in
+# the (never-reset-between-tests) cache, so requests from the single test client
+# would accumulate across the suite and trip flaky 429s. Rate limiting is pure
+# config + a listener and stays active in dev/prod.
+framework:
+    rate_limiter:
+        authenticated_api:
+            limit: 1000000
+        anonymous_api:
+            limit: 1000000

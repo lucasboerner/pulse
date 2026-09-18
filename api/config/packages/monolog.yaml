@@ -1,0 +1,48 @@
+monolog:
+    handlers:
+        main:
+            type: stream
+            path: '%kernel.logs_dir%/%kernel.environment%.log'
+            level: debug
+            channels: ['!event']
+        console:
+            type: console
+            process_psr_3_messages: false
+            channels: ['!event', '!doctrine', '!console']
+
+when@prod:
+    monolog:
+        handlers:
+            # Prod gets its own handler stack instead of falling through to the
+            # dev-level default above. Logs go to /var/log/app/prod.log at LOG_LEVEL
+            # (info by default — debug is too chatty). Monolog's stream handler
+            # writes an unbounded file and rotates only by date/count, never size,
+            # so cap it at the OS level if the deployment keeps the file around.
+            main:
+                type: stream
+                path: '/var/log/app/prod.log'
+                level: '%env(LOG_LEVEL)%'
+                channels: ['!event']
+            # CLI contexts (the `messenger:consume -v` worker) also surface on stdout,
+            # so `docker logs <service>` stays useful next to the file. FrankenPHP web
+            # requests have no console and log to the file only.
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ['!event', '!doctrine', '!console']
+
+when@test:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: critical
+                handler: nested
+                excluded_http_codes: [404, 405]
+                channels: ['!event']
+            nested:
+                type: stream
+                path: '%kernel.logs_dir%/%kernel.environment%.log'
+                level: debug
+            console:
+                type: 'null'

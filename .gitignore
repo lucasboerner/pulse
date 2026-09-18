@@ -1,0 +1,10 @@
+.idea
+.php-cs-fixer.cache
+.DS_Store
+
+# Stray root-level node tooling (the real frontend lives in app/)
+/node_modules
+/yarn.lock
+
+# Local Docker Compose overrides (machine-specific values)
+/.env

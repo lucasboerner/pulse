@@ -1,0 +1,175 @@
+x-api-env: &api-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-!ChangeMe!}@database:5432/${POSTGRES_DB:-app}?serverVersion=${POSTGRES_VERSION:-16}&charset=${POSTGRES_CHARSET:-utf8}
+  # Outbound mail goes to the local Mailpit sink and is read in its web UI
+  # (http://mailpit.pulse.orb.local). APP_FRONTEND_URL is the base URL used
+  # to build links in mail sent from CLI/worker contexts, which have no incoming
+  # request to derive it from.
+  MAILER_DSN: smtp://mailpit:1025
+  APP_FRONTEND_URL: http://app.pulse.orb.local
+  # Mercure hub — api/worker publish server-side to MERCURE_URL (internal name),
+  # the browser subscribes to MERCURE_PUBLIC_URL. MERCURE_JWT_SECRET signs the
+  # tokens and must match the hub's publisher/subscriber keys (mercure service
+  # below). Fixed committed dev value, like APP_SECRET in api/.env.dev — not a
+  # real secret, and stable so tokens survive container restarts. The publishing
+  # code and subscriber cookie arrive in later phases.
+  MERCURE_URL: http://mercure/.well-known/mercure
+  MERCURE_PUBLIC_URL: http://mercure.pulse.orb.local/.well-known/mercure
+  MERCURE_JWT_SECRET: "!ChangeThisMercureHubJWTSecretKey!"
+
+services:
+  api:
+    build:
+      context: ./api
+      target: frankenphp_dev
+    restart: unless-stopped
+    depends_on:
+      # service_started, not service_healthy: the entrypoint does its own
+      # connection polling. This just makes `docker compose up -d api` (which the
+      # quality hooks run) also bring the database up.
+      database:
+        condition: service_started
+    environment:
+      <<: *api-env
+      SERVER_NAME: api.pulse.orb.local, :80
+    ports:
+      # Plain-HTTP host port for native clients (a mobile app on a simulator /
+      # emulator / physical device). The `api.pulse.orb.local` HTTPS domain
+      # uses OrbStack's local CA, which those runtimes don't trust; hitting `:80`
+      # with a non-matching Host (localhost:8080) skips the 308→HTTPS redirect and
+      # serves plain HTTP. The browser/web app keep using the domain.
+      - "8080:80"
+    volumes:
+      - ./api:/app
+      - api_data:/data
+      - api_config:/config
+    labels:
+      - "dev.orbstack.domains=api.pulse.orb.local"
+
+  # Drains the async work queue (App\Message\*) — anything dispatched to the
+  # `async` Messenger transport runs here, off the request. Same image + env as
+  # api; --time-limit recycles it hourly (picks up code changes, frees memory).
+  worker:
+    build:
+      context: ./api
+      target: frankenphp_dev
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      # Wait for api, which owns the boot-time migration. Starting in parallel
+      # would have both containers migrate at once — see SKIP_MIGRATIONS in
+      # api/frankenphp/docker-entrypoint.sh.
+      api:
+        condition: service_healthy
+    environment:
+      <<: *api-env
+      SKIP_MIGRATIONS: "1"
+    command: php bin/console messenger:consume async --time-limit=3600 -v
+    # The image HEALTHCHECK probes Caddy's admin socket (:2019), which only
+    # exists when the container runs frankenphp — a messenger:consume process
+    # would report unhealthy forever, so the check is disabled here.
+    healthcheck:
+      disable: true
+    volumes:
+      - ./api:/app
+
+  # Symfony Scheduler — consumes the `scheduler_default` transport so commands
+  # declared on a #[AsSchedule] provider fire on cron.
+  #
+  # COMMENTED OUT ON PURPOSE: `messenger:consume scheduler_default` exits with an
+  # error (and the container crash-loops) while no Schedule provider exists.
+  # Uncomment once you add one — e.g. src/Scheduler/MainSchedule.php with
+  # #[AsSchedule] — and mirror it into compose.selfhost.yaml.
+  #
+  # scheduler:
+  #   build:
+  #     context: ./api
+  #     target: frankenphp_dev
+  #   restart: unless-stopped
+  #   depends_on:
+  #     database:
+  #       condition: service_healthy
+  #     api:
+  #       condition: service_healthy
+  #   environment:
+  #     <<: *api-env
+  #     SKIP_MIGRATIONS: "1"
+  #   command: php bin/console messenger:consume scheduler_default --time-limit=3600 -v
+  #   healthcheck:
+  #     disable: true # image HEALTHCHECK probes Caddy — see worker
+  #   volumes:
+  #     - ./api:/app
+
+  app:
+    build:
+      context: ./app
+      target: dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      # Where the browser subscribes for live updates (phase 5 wires the client).
+      - MERCURE_PUBLIC_URL=http://mercure.pulse.orb.local/.well-known/mercure
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+      - /app/.next
+    labels:
+      - "dev.orbstack.domains=app.pulse.orb.local"
+    ports:
+      - "3000:3000"
+
+  # Mercure hub — the SSE server the worker publishes check results / incident
+  # transitions to and the open page subscribes to (phase 3 publishes, phase 5
+  # subscribes). Plain HTTP in dev: SERVER_NAME ':80' turns off Caddy auto-TLS,
+  # and OrbStack fronts it at http://mercure.pulse.orb.local via the label.
+  mercure:
+    image: dunglas/mercure
+    restart: unless-stopped
+    environment:
+      SERVER_NAME: ":80"
+      # Fixed committed dev keys — must equal MERCURE_JWT_SECRET in x-api-env.
+      MERCURE_PUBLISHER_JWT_KEY: "!ChangeThisMercureHubJWTSecretKey!"
+      MERCURE_SUBSCRIBER_JWT_KEY: "!ChangeThisMercureHubJWTSecretKey!"
+      # Let the dev browser origins subscribe (phase 5).
+      MERCURE_EXTRA_DIRECTIVES: |
+        cors_origins http://app.pulse.orb.local http://localhost:3000
+    labels:
+      - "dev.orbstack.domains=mercure.pulse.orb.local"
+    ports:
+      - "3001:80"
+
+  # Mailpit — a local SMTP sink + web inbox for outbound mail in dev. The
+  # api/worker reach it as smtp://mailpit:1025 (MAILER_DSN); the inbox UI is at
+  # http://mailpit.pulse.orb.local (or localhost:8025). Nothing ever leaves
+  # the machine.
+  mailpit:
+    image: axllent/mailpit
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "8025:8025"
+    labels:
+      - "dev.orbstack.domains=mailpit.pulse.orb.local"
+
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-!ChangeMe!}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "${POSTGRES_DB:-app}", "-U", "${POSTGRES_USER:-app}"]
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - database_data:/var/lib/postgresql/data:rw
+    ports:
+      - "5432:5432"
+
+volumes:
+  api_data:
+  api_config:
+  database_data:

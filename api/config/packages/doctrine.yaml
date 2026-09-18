@@ -1,0 +1,57 @@
+doctrine:
+    dbal:
+        url: '%env(resolve:DATABASE_URL)%'
+
+        # IMPORTANT: You MUST configure your server version,
+        # either here or in the DATABASE_URL env var (see .env file)
+        #server_version: '16'
+
+        # Capturing a PHP backtrace per query is pure dev overhead that scales
+        # with query count; disabled so profiled timings reflect real DB cost.
+        profiling_collect_backtrace: false
+    orm:
+        validate_xml_mapping: true
+        naming_strategy: doctrine.orm.naming_strategy.underscore
+        identity_generation_preferences:
+            Doctrine\DBAL\Platforms\PostgreSQLPlatform: identity
+        auto_mapping: true
+        # stof enables the SoftDeleteable *listener* (remove() → deletedAt stamp);
+        # this query filter is what hides soft-deleted rows from all reads.
+        filters:
+            softdeleteable:
+                class: Gedmo\SoftDeleteable\Filter\SoftDeleteableFilter
+                enabled: true
+        mappings:
+            App:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Entity'
+                prefix: 'App\Entity'
+                alias: App
+
+when@test:
+    doctrine:
+        dbal:
+            url: 'sqlite:///%kernel.project_dir%/var/test.db'
+            driver: pdo_sqlite
+        orm:
+            # Disable identity_generation_preferences for SQLite (PostgreSQL-specific)
+            identity_generation_preferences: []
+
+when@prod:
+    doctrine:
+        orm:
+            query_cache_driver:
+                type: pool
+                pool: doctrine.system_cache_pool
+            result_cache_driver:
+                type: pool
+                pool: doctrine.result_cache_pool
+
+    framework:
+        cache:
+            pools:
+                doctrine.result_cache_pool:
+                    adapter: cache.app
+                doctrine.system_cache_pool:
+                    adapter: cache.system

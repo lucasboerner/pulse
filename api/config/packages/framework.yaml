@@ -1,0 +1,20 @@
+# see https://symfony.com/doc/current/reference/configuration/framework.html
+framework:
+    secret: '%env(APP_SECRET)%'
+
+    # Note that the session will be started ONLY if you read or write from it.
+    session: true
+
+    # Registers the default HttpClientInterface service. Kept in `require` (not
+    # require-dev) on purpose — a --no-dev prod build drops require-dev packages,
+    # and a missing http-client only surfaces at prod cache:clear, never in CI.
+    http_client: ~
+
+    #esi: true
+    #fragments: true
+
+when@test:
+    framework:
+        test: true
+        session:
+            storage_factory_id: session.storage.factory.mock_file

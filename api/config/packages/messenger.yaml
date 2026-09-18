@@ -1,0 +1,24 @@
+framework:
+    messenger:
+        failure_transport: failed
+
+        transports:
+            # Background work queue (Doctrine-backed). auto_setup creates the
+            # messenger_messages table on first use; the `worker` compose service
+            # drains it. Route long-running work here to keep it off the request.
+            async: 'doctrine://default?queue_name=async'
+            failed: 'doctrine://default?queue_name=failed'
+
+        # Map message classes to a transport, e.g.
+        #   App\Message\SomeMessage: async
+        # Anything unmapped is handled synchronously in-process.
+        routing: []
+
+when@test:
+    framework:
+        messenger:
+            # In tests nothing is consumed: dispatches land in memory so they can
+            # be asserted without a worker.
+            transports:
+                async: 'in-memory://'
+                failed: 'in-memory://'
