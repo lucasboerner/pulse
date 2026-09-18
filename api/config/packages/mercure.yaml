@@ -1,8 +1,23 @@
 mercure:
     hubs:
         default:
-            url: '%env(default::MERCURE_URL)%'
-            public_url: '%env(default::MERCURE_PUBLIC_URL)%'
+            url: '%env(MERCURE_URL)%'
+            public_url: '%env(MERCURE_PUBLIC_URL)%'
+            # The hub is Mercure.rocks 1.0, which accepts only RFC 9068 access tokens
+            # (a typ "at+jwt" header, an authorization_details claim and iss/aud/exp),
+            # not the legacy "mercure" claim.
+            protocol_version: '1.0'
             jwt:
                 secret: '%env(MERCURE_JWT_SECRET)%'
-                publish: '*'
+                publish: ['*']
+                claims:
+                    # iss must match the hub's trusted issuer (MERCURE_TRUSTED_ISSUERS,
+                    # default https://localhost). sub and client_id are required by
+                    # RFC 9068 but unused by the hub.
+                    iss: 'https://localhost'
+                    sub: 'pulse'
+                    client_id: 'pulse'
+                    # The hub derives the expected audience from the request URL, and
+                    # the api and worker publish to the internal MERCURE_URL, so pin the
+                    # audience to it rather than letting it default to the public URL.
+                    aud: '%env(MERCURE_URL)%'
