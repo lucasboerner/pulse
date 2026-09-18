@@ -8,10 +8,12 @@ use ApiPlatform\Symfony\Bundle\Test\ApiTestCase;
 use ApiPlatform\Symfony\Bundle\Test\Client;
 use App\Entity\MonitorGroup;
 use App\Entity\User;
+use App\Message\RunCheck;
 use App\Tests\Factory\MonitorFactory;
 use App\Tests\Factory\MonitorGroupFactory;
 use App\Tests\Factory\UserFactory;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Zenstruck\Foundry\Test\Factories;
 use Zenstruck\Foundry\Test\ResetDatabase;
@@ -77,6 +79,38 @@ final class MonitorTest extends ApiTestCase
 
         // The join rows exist in monitor_subscriber for both.
         $this->assertSame(2, $this->joinRowCount($this->idFromIri($document['data']['id'])));
+    }
+
+    public function testCreatingAMonitorDispatchesOneCheck(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'operator']);
+        $token = $this->login($client, 'operator');
+
+        $response = $client->request('POST', '/api/monitors', $this->writeOptions($token, [
+            'data' => [
+                'type' => 'Monitor',
+                'attributes' => [
+                    'name' => 'Checked on create',
+                    'url' => 'https://create.example.com',
+                    'type' => 'http',
+                    'intervalSeconds' => 60,
+                    'timeoutMs' => 8000,
+                ],
+            ],
+        ]));
+        $this->assertResponseStatusCodeSame(201);
+        $monitorId = $this->idFromIri($response->toArray()['data']['id']);
+
+        // The inline first check is dispatched to the async transport, which is
+        // in-memory in tests — assert the dispatch, not the result.
+        $transport = static::getContainer()->get('messenger.transport.async');
+        $this->assertInstanceOf(InMemoryTransport::class, $transport);
+        $sent = $transport->getSent();
+        $this->assertCount(1, $sent);
+        $message = $sent[0]->getMessage();
+        $this->assertInstanceOf(RunCheck::class, $message);
+        $this->assertSame($monitorId, $message->monitorId);
     }
 
     public function testCreatingASecondMonitorWithTheSameUrlAndTypeIsUnprocessable(): void
