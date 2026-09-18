@@ -130,3 +130,4 @@ pulse/
 - **Example code**: files marked `EXAMPLE — safe to delete` are a working vertical
   slice, not scaffolding you must keep. Find them all with
   `grep -rl 'EXAMPLE — safe to delete' .`
+- **Mercure hub is 1.0**: `dunglas/mercure` enforces RFC 9068, so every publisher and (future) subscriber JWT must be protocol `1.0` with a trusted `iss` (`https://localhost` by default), an `aud` pinned to the exact URL that side posts to, and a `typ: at+jwt` header — the legacy bundle-default token is rejected with a 401.
