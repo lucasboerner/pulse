@@ -73,32 +73,27 @@ services:
     volumes:
       - ./api:/app
 
-  # Symfony Scheduler — consumes the `scheduler_default` transport so commands
-  # declared on a #[AsSchedule] provider fire on cron.
-  #
-  # COMMENTED OUT ON PURPOSE: `messenger:consume scheduler_default` exits with an
-  # error (and the container crash-loops) while no Schedule provider exists.
-  # Uncomment once you add one — e.g. src/Scheduler/MainSchedule.php with
-  # #[AsSchedule] — and mirror it into compose.selfhost.yaml.
-  #
-  # scheduler:
-  #   build:
-  #     context: ./api
-  #     target: frankenphp_dev
-  #   restart: unless-stopped
-  #   depends_on:
-  #     database:
-  #       condition: service_healthy
-  #     api:
-  #       condition: service_healthy
-  #   environment:
-  #     <<: *api-env
-  #     SKIP_MIGRATIONS: "1"
-  #   command: php bin/console messenger:consume scheduler_default --time-limit=3600 -v
-  #   healthcheck:
-  #     disable: true # image HEALTHCHECK probes Caddy — see worker
-  #   volumes:
-  #     - ./api:/app
+  # Symfony Scheduler — consumes the `scheduler_default` transport, where the
+  # #[AsSchedule] provider (api/src/Schedule.php) emits a DispatchDueChecks tick
+  # every 15 seconds. Same image + env as the worker; --time-limit recycles it.
+  scheduler:
+    build:
+      context: ./api
+      target: frankenphp_dev
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      <<: *api-env
+      SKIP_MIGRATIONS: "1"
+    command: php bin/console messenger:consume scheduler_default --time-limit=3600 -v
+    healthcheck:
+      disable: true # image HEALTHCHECK probes Caddy — see worker
+    volumes:
+      - ./api:/app
 
   app:
     build:
