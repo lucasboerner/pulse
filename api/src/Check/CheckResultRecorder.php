@@ -6,7 +6,11 @@ namespace App\Check;
 
 use App\Entity\CheckResult;
 use App\Entity\Monitor;
+use App\Incident\IncidentEngine;
+use App\Incident\IncidentTransition;
+use App\Message\NotifyIncident;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 /**
  * Writes one check and denormalises its outcome onto the monitor in a single
@@ -25,12 +29,16 @@ final readonly class CheckResultRecorder
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MonitorUpdatePublisher $publisher,
+        private IncidentEngine $incidentEngine,
+        private MessageBusInterface $bus,
     ) {
     }
 
     public function record(Monitor $monitor, CheckOutcome $outcome, \DateTimeImmutable $checkedAt): void
     {
-        $this->entityManager->wrapInTransaction(function () use ($monitor, $outcome, $checkedAt): void {
+        $transition = null;
+
+        $this->entityManager->wrapInTransaction(function () use ($monitor, $outcome, $checkedAt, &$transition): void {
             $result = (new CheckResult())
                 ->setMonitor($monitor)
                 ->setStatus($outcome->status)
@@ -46,7 +54,7 @@ final readonly class CheckResultRecorder
                 ->setLastCheckedAt($checkedAt)
                 ->setNextCheckAt($this->nextCheckAt($monitor, $checkedAt));
 
-            // Phase 4 opens or closes the incident here, in the same transaction.
+            $transition = $this->incidentEngine->reconcile($monitor, $outcome, $checkedAt);
 
             $this->entityManager->flush();
         });
@@ -54,6 +62,17 @@ final readonly class CheckResultRecorder
         // After the commit, never inside it: a subscriber must not be told about a
         // status that then rolls back.
         $this->publisher->publish($monitor);
+
+        // Mail is its own message, dispatched only once the check is durably
+        // committed, so a rollback sends nothing. The status change an incident
+        // transition rides is already carried by the single publish above — this
+        // adds no second one.
+        if ($transition instanceof IncidentTransition) {
+            $this->bus->dispatch(new NotifyIncident(
+                (string) $transition->incident->getId(),
+                $transition->kind,
+            ));
+        }
     }
 
     private function nextCheckAt(Monitor $monitor, \DateTimeImmutable $checkedAt): \DateTimeImmutable
