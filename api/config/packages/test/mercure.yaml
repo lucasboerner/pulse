@@ -1,0 +1,10 @@
+# The check pipeline publishes through the autowired HubInterface. In tests the
+# hub must never be reached over the network, so bind an in-memory double that
+# records every update for assertion instead of the real, HTTP-backed hub.
+services:
+    App\Tests\Double\CollectingHub:
+        public: true
+
+    Symfony\Component\Mercure\HubInterface:
+        alias: App\Tests\Double\CollectingHub
+        public: true
