@@ -8,13 +8,19 @@ use App\Check\CheckOutcome;
 use App\Check\CheckResultRecorder;
 use App\Check\MonitorUpdatePublisher;
 use App\Entity\CheckResult;
+use App\Entity\Incident;
 use App\Enum\CheckStatus;
+use App\Incident\IncidentEngine;
+use App\Incident\IncidentTransitionKind;
+use App\Message\NotifyIncident;
 use App\Tests\Double\CollectingHub;
 use App\Tests\Double\ThrowingHub;
 use App\Tests\Factory\MonitorFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
 use Zenstruck\Foundry\Test\Factories;
 use Zenstruck\Foundry\Test\ResetDatabase;
 
@@ -88,11 +94,69 @@ final class CheckResultRecorderTest extends KernelTestCase
         $recorder = new CheckResultRecorder(
             $this->entityManager(),
             new MonitorUpdatePublisher(new ThrowingHub(), new NullLogger()),
+            $this->incidentEngine(),
+            $this->messageBus(),
         );
 
         $recorder->record($monitor, new CheckOutcome(CheckStatus::Up, 10, 200, null), new \DateTimeImmutable());
 
         self::assertCount(1, $this->entityManager()->getRepository(CheckResult::class)->findBy(['monitor' => $monitor]));
+    }
+
+    public function testAFailingCheckWritesTheIncidentAndDispatchesOneNotification(): void
+    {
+        self::bootKernel();
+        $monitor = MonitorFactory::createOne();
+
+        $this->recorder()->record($monitor, new CheckOutcome(CheckStatus::Down, null, null, 'unreachable'), new \DateTimeImmutable());
+
+        self::assertCount(1, $this->entityManager()->getRepository(Incident::class)->findBy(['monitor' => $monitor]));
+        $dispatched = $this->dispatchedNotifications();
+        self::assertCount(1, $dispatched);
+        self::assertSame(IncidentTransitionKind::Opened, $dispatched[0]->kind);
+    }
+
+    public function testACheckWithNoTransitionDispatchesNoNotification(): void
+    {
+        self::bootKernel();
+        $monitor = MonitorFactory::createOne();
+
+        $this->recorder()->record($monitor, new CheckOutcome(CheckStatus::Up, 10, 200, null), new \DateTimeImmutable());
+
+        self::assertCount(0, $this->dispatchedNotifications());
+    }
+
+    public function testARecoveringCheckDispatchesTheResolvedNotification(): void
+    {
+        self::bootKernel();
+        $monitor = MonitorFactory::createOne();
+
+        $this->recorder()->record($monitor, new CheckOutcome(CheckStatus::Down, null, null, 'unreachable'), new \DateTimeImmutable('2026-01-01 10:00:00'));
+        $this->recorder()->record($monitor, new CheckOutcome(CheckStatus::Up, 20, 200, null), new \DateTimeImmutable('2026-01-01 10:05:00'));
+
+        $dispatched = $this->dispatchedNotifications();
+        self::assertCount(2, $dispatched);
+        self::assertSame(IncidentTransitionKind::Opened, $dispatched[0]->kind);
+        self::assertSame(IncidentTransitionKind::Resolved, $dispatched[1]->kind);
+    }
+
+    /**
+     * @return list<NotifyIncident>
+     */
+    private function dispatchedNotifications(): array
+    {
+        $transport = self::getContainer()->get('messenger.transport.async');
+        \assert($transport instanceof InMemoryTransport);
+
+        $messages = [];
+        foreach ($transport->getSent() as $envelope) {
+            $message = $envelope->getMessage();
+            if ($message instanceof NotifyIncident) {
+                $messages[] = $message;
+            }
+        }
+
+        return $messages;
     }
 
     private function recorder(): CheckResultRecorder
@@ -117,5 +181,21 @@ final class CheckResultRecorderTest extends KernelTestCase
         \assert($entityManager instanceof EntityManagerInterface);
 
         return $entityManager;
+    }
+
+    private function incidentEngine(): IncidentEngine
+    {
+        $engine = self::getContainer()->get(IncidentEngine::class);
+        \assert($engine instanceof IncidentEngine);
+
+        return $engine;
+    }
+
+    private function messageBus(): MessageBusInterface
+    {
+        $bus = self::getContainer()->get(MessageBusInterface::class);
+        \assert($bus instanceof MessageBusInterface);
+
+        return $bus;
     }
 }
