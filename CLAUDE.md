@@ -114,6 +114,13 @@ pulse/
 - **API Content-Type**: `application/vnd.api+json` — JSON-LD/Hydra is **disabled**;
   only `json` + `jsonapi` formats are enabled in `api/config/packages/api_platform.yaml`.
   API docs render with Scalar at `/api/docs`.
+- **JSON:API attribute naming**: a resource property named `type` is written and read as
+  `_type` in payloads — API Platform reserves `type` for the resource type — so `Monitor`'s
+  `type` field is `_type` over the wire.
+- **API resources are DTOs**: the exposed shapes live in `api/src/ApiResource/` (e.g.
+  `MonitorResource`) and map onto entities with Symfony's Object Mapper via `#[Map]` +
+  `stateOptions: new Options(entityClass: …)`. The read direction reads the entity's `#[Map]`,
+  the write direction the DTO's; read-only fields opt out of writes with `#[Map(if: false)]`.
 - **Database**: PostgreSQL 16 in dev/prod, SQLite for tests. The migrations are
   PostgreSQL-shaped and must never run against the test database — Foundry's
   `ResetDatabase` builds the test schema from entity metadata.
