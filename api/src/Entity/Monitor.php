@@ -13,6 +13,11 @@ use ApiPlatform\Metadata\Post;
 use App\Enum\CheckStatus;
 use App\Enum\MonitorType;
 use App\Repository\MonitorRepository;
+use App\State\MonitorCollectionProvider;
+use App\State\MonitorCreateProcessor;
+use App\State\MonitorDeleteProcessor;
+use App\State\MonitorItemProvider;
+use App\State\MonitorUpdateProcessor;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
@@ -44,11 +49,11 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[ApiResource(
     shortName: 'Monitor',
     operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Patch(),
-        new Delete(),
+        new GetCollection(provider: MonitorCollectionProvider::class),
+        new Get(provider: MonitorItemProvider::class),
+        new Post(processor: MonitorCreateProcessor::class),
+        new Patch(processor: MonitorUpdateProcessor::class),
+        new Delete(processor: MonitorDeleteProcessor::class),
     ],
     normalizationContext: ['groups' => ['monitor:read']],
     denormalizationContext: ['groups' => ['monitor:write']],
