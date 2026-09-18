@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Tests\Double;
 
-use Symfony\Component\HttpClient\Exception\TransportException;
+use Symfony\Component\Mercure\Exception\RuntimeException;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Jwt\TokenFactoryInterface;
 use Symfony\Component\Mercure\ProtocolVersion;
 use Symfony\Component\Mercure\Update;
 
 /**
- * A hub that is unreachable: every publish raises the transport exception a real,
- * HTTP-backed hub raises when it cannot be reached, so a test can prove a failed
- * publish never fails an already-committed check.
+ * A hub that is unreachable: every publish raises the exception a real hub raises
+ * when it cannot deliver an update, so a test can prove a failed publish never fails
+ * an already-committed check.
  */
 final class ThrowingHub implements HubInterface
 {
@@ -39,6 +39,6 @@ final class ThrowingHub implements HubInterface
 
     public function publish(Update $update): string
     {
-        throw new TransportException('The Mercure hub is unreachable.');
+        throw new RuntimeException('Failed to send an update.');
     }
 }

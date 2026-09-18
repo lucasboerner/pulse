@@ -6,6 +6,7 @@ namespace App\Check;
 
 use App\Entity\Monitor;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Mercure\Exception\ExceptionInterface as MercureExceptionInterface;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpClientExceptionInterface;
@@ -38,7 +39,7 @@ final readonly class MonitorUpdatePublisher
 
         try {
             $this->hub->publish($update);
-        } catch (HttpClientExceptionInterface $exception) {
+        } catch (MercureExceptionInterface|HttpClientExceptionInterface $exception) {
             $this->logger->warning('Publishing a monitor update to the Mercure hub failed.', [
                 'monitor' => $id,
                 'exception' => $exception,
