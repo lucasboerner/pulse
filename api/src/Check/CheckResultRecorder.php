@@ -24,6 +24,7 @@ final readonly class CheckResultRecorder
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
+        private MonitorUpdatePublisher $publisher,
     ) {
     }
 
@@ -49,6 +50,10 @@ final readonly class CheckResultRecorder
 
             $this->entityManager->flush();
         });
+
+        // After the commit, never inside it: a subscriber must not be told about a
+        // status that then rolls back.
+        $this->publisher->publish($monitor);
     }
 
     private function nextCheckAt(Monitor $monitor, \DateTimeImmutable $checkedAt): \DateTimeImmutable
