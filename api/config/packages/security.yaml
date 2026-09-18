@@ -4,30 +4,43 @@ security:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
 
     # https://symfony.com/doc/current/security.html#loading-the-user-the-user-provider
+    # Users live in the database and log in with their username.
     providers:
-        users_in_memory: { memory: null }
+        app_user_provider:
+            entity:
+                class: App\Entity\User
+                property: username
 
     firewalls:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
         main:
-            lazy: true
-            provider: users_in_memory
-
-            # activate different ways to authenticate
-            # https://symfony.com/doc/current/security.html#the-firewall
-
-            # https://symfony.com/doc/current/security/impersonating_user.html
-            # switch_user: true
+            # No session and no login form: the firewall is stateless. POST
+            # /auth/login exchanges credentials for a JWT via json_login; every
+            # other request is authenticated by the JWT in its Authorization
+            # header. Both authenticators return a JSON 401 on failure.
+            stateless: true
+            provider: app_user_provider
+            json_login:
+                check_path: auth_login
+                username_path: username
+                password_path: password
+                success_handler: lexik_jwt_authentication.handler.authentication_success
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+            jwt: ~
 
     # Easy way to control access for large sections of your site
-    # Note: Only the *first* access control that matches will be used
+    # Note: Only the *first* access control that matches will be used, so the two
+    # public routes are listed before the catch-all.
     access_control:
         # The /health probe must stay public — it is hit by an external uptime
         # monitor and must not sit behind any edge authentication.
         - { path: ^/health$, roles: PUBLIC_ACCESS }
-        # - { path: ^/api, roles: ROLE_USER }
+        # Login exchanges credentials for a token, so it cannot require one.
+        - { path: ^/auth/login$, roles: PUBLIC_ACCESS }
+        # Everything else — the API and its Scalar docs — needs a valid token.
+        - { path: ^/, roles: IS_AUTHENTICATED_FULLY }
 
 when@test:
     security:

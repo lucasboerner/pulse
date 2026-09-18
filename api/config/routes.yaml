@@ -9,3 +9,9 @@
 
 controllers:
     resource: routing.controllers
+
+# POST target for the json_login authenticator: the security firewall intercepts
+# this request and returns a JWT, so the route needs no controller of its own.
+auth_login:
+    path: /auth/login
+    methods: [POST]
