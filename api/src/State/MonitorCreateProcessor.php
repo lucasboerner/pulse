@@ -12,12 +12,15 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
- * Persists a new monitor by decorating the Doctrine persist processor, which
- * writes the row and its subscriber join rows in one transaction.
+ * Subscribes the creating operator, then persists. The Object Mapper's input
+ * processor has already mapped the resource onto a Monitor entity by the time this
+ * runs, so it receives the entity and adds the operator before the decorated
+ * Doctrine persist processor writes the row and its subscriber join rows in one
+ * transaction.
  *
- * The creating operator is always subscribed. A client-supplied list is kept and
- * the creator added to it, never replaced by it; a monitor with no other
- * subscribers is still valid — it checks and opens incidents, it just mails nobody.
+ * A client-supplied subscriber list is kept and the creator added to it; a monitor
+ * with no other subscribers is still valid — it checks and opens incidents, it just
+ * mails nobody.
  *
  * @implements ProcessorInterface<Monitor, Monitor>
  */
