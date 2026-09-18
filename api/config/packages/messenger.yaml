@@ -11,8 +11,10 @@ framework:
 
         # Map message classes to a transport, e.g.
         #   App\Message\SomeMessage: async
-        # Anything unmapped is handled synchronously in-process.
-        routing: []
+        # Anything unmapped is handled synchronously in-process — DispatchDueChecks
+        # stays unrouted so the scheduler consumer handles it where it is received.
+        routing:
+            App\Message\RunCheck: async
 
 when@test:
     framework:
