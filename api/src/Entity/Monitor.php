@@ -25,7 +25,10 @@ use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 use Gedmo\SoftDeleteable\Traits\SoftDeleteableEntity;
 use Gedmo\Timestampable\Traits\TimestampableEntity;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 /**
  * A target and its schedule. The central entity: the type enum, not a subclass,
@@ -40,6 +43,10 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * go through one state class per operation under App\State. The read group is on
  * every property; the write group is only on the columns a client may set — the
  * check pipeline owns nextCheckAt, lastCheckedAt, lastStatus and region.
+ *
+ * The url/type pair is unique at the application level only: a database index
+ * would also count soft-deleted rows and block re-adding a deleted target, whereas
+ * the repository query behind UniqueEntity skips them through the same filter.
  */
 #[ORM\Entity(repositoryClass: MonitorRepository::class)]
 #[ORM\Table(name: 'monitor')]
@@ -58,6 +65,11 @@ use Symfony\Component\Serializer\Attribute\Groups;
     normalizationContext: ['groups' => ['monitor:read']],
     denormalizationContext: ['groups' => ['monitor:write']],
 )]
+#[UniqueEntity(
+    fields: ['url', 'type'],
+    errorPath: 'url',
+    message: 'A monitor with this URL and type already exists.',
+)]
 class Monitor
 {
     use EntityIdTrait;
@@ -66,10 +78,15 @@ class Monitor
 
     #[ORM\Column(type: Types::STRING, length: 120)]
     #[Groups(['monitor:read', 'monitor:write'])]
+    #[Assert\NotBlank]
+    #[Assert\Length(max: 120)]
     private string $name;
 
     #[ORM\Column(type: Types::STRING, length: 2048)]
     #[Groups(['monitor:read', 'monitor:write'])]
+    #[Assert\NotBlank]
+    #[Assert\Url]
+    #[Assert\Length(max: 2048)]
     private string $url;
 
     #[ORM\Column(type: Types::STRING, length: 32, enumType: MonitorType::class, options: ['default' => MonitorType::Http->value])]
@@ -78,14 +95,17 @@ class Monitor
 
     #[ORM\Column(type: Types::INTEGER, options: ['default' => 60])]
     #[Groups(['monitor:read', 'monitor:write'])]
+    #[Assert\GreaterThanOrEqual(15)]
     private int $intervalSeconds = 60;
 
     #[ORM\Column(type: Types::INTEGER, options: ['default' => 8000])]
     #[Groups(['monitor:read', 'monitor:write'])]
+    #[Assert\Positive]
     private int $timeoutMs = 8000;
 
     #[ORM\Column(type: Types::SMALLINT, nullable: true)]
     #[Groups(['monitor:read', 'monitor:write'])]
+    #[Assert\Range(min: 100, max: 599)]
     private ?int $expectedStatusCode = null;
 
     #[ORM\Column(type: Types::BOOLEAN, options: ['default' => true])]
@@ -137,6 +157,21 @@ class Monitor
     {
         $this->nextCheckAt = new \DateTimeImmutable();
         $this->subscribers = new ArrayCollection();
+    }
+
+    /**
+     * A check may not outlive its own interval: the timeout, in milliseconds, must
+     * fit inside intervalSeconds. Expressed as a callback because it spans two
+     * fields, and reported against timeoutMs so the 422 names the field at fault.
+     */
+    #[Assert\Callback]
+    public function validateTimeoutWithinInterval(ExecutionContextInterface $context): void
+    {
+        if ($this->timeoutMs > $this->intervalSeconds * 1000) {
+            $context->buildViolation('The timeout must not exceed the interval (interval_seconds × 1000 milliseconds).')
+                ->atPath('timeoutMs')
+                ->addViolation();
+        }
     }
 
     public function getName(): string
