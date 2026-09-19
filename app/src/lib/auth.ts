@@ -43,6 +43,24 @@ export async function setSessionCookie(token: string): Promise<void> {
   });
 }
 
+/**
+ * The signed-in operator's username, decoded from the token. Used to resolve the
+ * current operator in the users collection so the monitor form can pre-select
+ * them as a subscriber. The API stays the authority; this is convenience only.
+ */
+export async function getCurrentUsername(): Promise<string | null> {
+  const token = await getToken();
+  if (!token) return null;
+  try {
+    const payload = decodeJwt(token);
+    if (typeof payload.username === "string" && payload.username) return payload.username;
+    if (typeof payload.sub === "string" && payload.sub) return payload.sub;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 /** Clears the session — both the API token and the Mercure subscriber token. */
 export async function clearSession(): Promise<void> {
   const store = await cookies();

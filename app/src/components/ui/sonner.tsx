@@ -9,11 +9,21 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      position="bottom-right"
+      duration={2600}
       className="toaster group"
+      toastOptions={{
+        classNames: {
+          // Lyra toast: card fill, hairline border with a 2px teal left edge,
+          // sharp corners, 13px single line. Confirms facts, never celebrates.
+          toast:
+            "!rounded-none !border !border-border !border-l-2 !border-l-primary !bg-card !text-[13px] !text-foreground",
+        },
+      }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
+          "--normal-bg": "var(--card)",
+          "--normal-text": "var(--foreground)",
           "--normal-border": "var(--border)",
         } as React.CSSProperties
       }
