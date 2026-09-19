@@ -8,6 +8,7 @@ use ApiPlatform\Symfony\Bundle\Test\ApiTestCase;
 use ApiPlatform\Symfony\Bundle\Test\Client;
 use App\Enum\CheckStatus;
 use App\Tests\Factory\CheckResultFactory;
+use App\Tests\Factory\CheckRollupFactory;
 use App\Tests\Factory\IncidentFactory;
 use App\Tests\Factory\MonitorFactory;
 use App\Tests\Factory\UserFactory;
@@ -132,6 +133,56 @@ final class MonitorHistoryTest extends ApiTestCase
         $this->assertSame('down', $byDay[$day(10)]);
         $this->assertSame('up', $byDay[$day(40)]);
         $this->assertNull($byDay[$day(5)], 'A day with no check carries a null status.');
+    }
+
+    public function testLongWindowFiguresReadFromRollupsAfterRawExpiry(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'operator']);
+        $monitor = MonitorFactory::createOne(['url' => 'https://rollup-history.example.com']);
+        $today = new \DateTimeImmutable('today', new \DateTimeZone('UTC'));
+
+        // Sixty days of hourly rollups (one per day is enough — the reader does not need
+        // every hour present), all up, except a down on the day 50 days back: a day well
+        // beyond the 7-day raw window and the 30-day uptime window, so its status and the
+        // ratios can only come from rollups.
+        for ($daysAgo = 1; $daysAgo <= 60; ++$daysAgo) {
+            CheckRollupFactory::createOne([
+                'monitor' => $monitor,
+                'bucketStart' => $today->modify("-{$daysAgo} days")->setTime(12, 0),
+                'upCount' => 5,
+                'downCount' => 50 === $daysAgo ? 3 : 0,
+                'latencyAvgMs' => 120,
+            ]);
+        }
+
+        // Raw rows only for the last couple of hours — the tail past the newest rollup.
+        $now = new \DateTimeImmutable();
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 110, 'checkedAt' => $now->modify('-1 hour')]);
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 130, 'checkedAt' => $now->modify('-2 hours')]);
+
+        $token = $this->login($client, 'operator');
+        $response = $client->request('GET', '/api/monitors/'.$monitor->getId().'/history', $this->readOptions($token));
+
+        $this->assertResponseStatusCodeSame(200);
+        $attributes = $response->toArray()['data']['attributes'];
+
+        // 30-day uptime is a real figure, not collapsed to the raw tail: thirty up-only
+        // rollups plus the two up raw rows.
+        $this->assertNotNull($attributes['uptimeRatio30d']);
+        $this->assertEqualsWithDelta(1.0, $attributes['uptimeRatio30d'], 0.0001);
+        $this->assertNotNull($attributes['uptimeRatio7d']);
+
+        // The 90-day strip carries status on days far older than the raw window.
+        $strip = $attributes['dailyStatus'];
+        $this->assertCount(90, $strip);
+        $byDay = array_column($strip, 'status', 'day');
+        $day = static fn (int $ago): string => $today->modify("-{$ago} days")->format('Y-m-d');
+        $this->assertSame('down', $byDay[$day(50)], 'A rollup-only day still carries its status.');
+        $this->assertSame('up', $byDay[$day(40)]);
+        $this->assertNotNull($byDay[$day(20)], 'Days beyond raw retention are not blank.');
+        // Today is filled by the raw tail, not a rollup.
+        $this->assertSame('up', $byDay[$day(0)]);
     }
 
     public function testRecentChecksAreTheTenNewestNewestFirst(): void

@@ -9,6 +9,7 @@ use ApiPlatform\Symfony\Bundle\Test\Client;
 use App\Enum\CheckStatus;
 use App\Enum\IncidentSeverity;
 use App\Tests\Factory\CheckResultFactory;
+use App\Tests\Factory\CheckRollupFactory;
 use App\Tests\Factory\IncidentFactory;
 use App\Tests\Factory\MonitorFactory;
 use App\Tests\Factory\UserFactory;
@@ -139,6 +140,51 @@ final class MetricsTest extends ApiTestCase
         // The oldest of the three is the resolved one, so it carries an end.
         $this->assertNotNull($incidents[2]['endedAt']);
         $this->assertSame('Timeout.', $incidents[2]['cause']);
+    }
+
+    public function testPerMonitorLongWindowFiguresReadFromRollups(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'operator']);
+        $monitor = MonitorFactory::createOne(['name' => 'Rolled', 'url' => 'https://rollup-metrics.example.com', 'enabled' => true, 'lastStatus' => CheckStatus::Up]);
+        $today = new \DateTimeImmutable('today', new \DateTimeZone('UTC'));
+
+        // Sixty days of hourly rollups, all up, except a down on the day 40 days back —
+        // inside the 45-day strip but beyond both the 30-day uptime window and the 7-day
+        // raw window, so it can only come from a rollup.
+        for ($daysAgo = 1; $daysAgo <= 60; ++$daysAgo) {
+            CheckRollupFactory::createOne([
+                'monitor' => $monitor,
+                'bucketStart' => $today->modify("-{$daysAgo} days")->setTime(12, 0),
+                'upCount' => 5,
+                'downCount' => 40 === $daysAgo ? 3 : 0,
+                'latencyAvgMs' => 120,
+            ]);
+        }
+
+        // Raw rows only for the last hour — the tail past the newest rollup.
+        $now = new \DateTimeImmutable();
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 110, 'checkedAt' => $now->modify('-1 hour')]);
+
+        $token = $this->login($client, 'operator');
+        $response = $client->request('GET', '/api/metrics', $this->readOptions($token));
+
+        $this->assertResponseStatusCodeSame(200);
+        $attributes = $response->toArray()['data']['attributes'];
+
+        // The fleet and the per-monitor 30-day uptime are real figures from the rollups.
+        $this->assertNotNull($attributes['uptimeRatio30d']);
+        $rollup = $this->rollupFor($attributes['monitors'], (string) $monitor->getId());
+        $this->assertNotNull($rollup['uptimeRatio30d']);
+        $this->assertEqualsWithDelta(1.0, $rollup['uptimeRatio30d'], 0.0001);
+
+        // The 45-day strip carries status on days beyond the raw window.
+        $strip = $rollup['dailyStatus'];
+        $this->assertCount(45, $strip);
+        $byDay = array_column($strip, 'status', 'day');
+        $day = static fn (int $ago): string => $today->modify("-{$ago} days")->format('Y-m-d');
+        $this->assertSame('down', $byDay[$day(40)], 'A rollup-only day still carries its status.');
+        $this->assertNotNull($byDay[$day(20)], 'Days beyond raw retention are not blank.');
     }
 
     public function testMetricsWithNoChecksReturnsNullsAndZeroesButAFullSeries(): void
