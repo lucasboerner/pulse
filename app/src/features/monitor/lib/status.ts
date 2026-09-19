@@ -73,15 +73,16 @@ export function intervalLabel(seconds: number): string {
 }
 
 /**
- * A relative timestamp for the last check. Computed on the server and rendered as
- * static text, so it never causes a hydration mismatch; it refreshes when the
- * page re-reads on a Mercure signal.
+ * A relative timestamp for the last check. Pass a fixed `now` (from the server
+ * render) when the value is shown inside a client component, so SSR and hydration
+ * produce the identical string; it refreshes when the page re-reads on a Mercure
+ * signal. Server components can rely on the default.
  */
-export function relativeTime(iso: string | null): string {
+export function relativeTime(iso: string | null, now: number = Date.now()): string {
   if (!iso) return "never";
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "never";
-  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  const seconds = Math.max(0, Math.round((now - then) / 1000));
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
