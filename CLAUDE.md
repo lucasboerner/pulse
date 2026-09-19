@@ -79,6 +79,11 @@ docker compose exec app yarn typecheck
 
 # Database
 docker compose exec database psql -U app app
+
+# Release (host, not in a container) — bumps both manifests, writes the
+# changelog, commits, tags vX.Y.Z and offers to push (that tag triggers
+# .github/workflows/publish.yml).
+./tag
 ```
 
 ## Project Structure
@@ -104,6 +109,8 @@ pulse/
 ├── .github/workflows/   # CI (lint, typecheck, tests)
 ├── compose.yaml         # Local development stack
 ├── compose.selfhost.yaml # Self-hosting stack (published GHCR images)
+├── tag                  # Release script: bump, changelog, commit, tag, push
+├── CHANGELOG.md         # Written by ./tag, one section per release
 └── CLAUDE.md            # This file
 ```
 
