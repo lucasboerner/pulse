@@ -8,6 +8,7 @@ use App\Entity\CheckResult;
 use App\Entity\Monitor;
 use App\Enum\CheckStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -224,5 +225,185 @@ class CheckResultRepository extends ServiceEntityRepository
                 'status' => $status instanceof CheckStatus ? $status : CheckStatus::from((string) $status),
             ];
         }, $rows);
+    }
+
+    /**
+     * The checkedAt of the oldest surviving raw row, or null when the table is empty.
+     * The rollup job starts its backfill at the hour containing this row when no rollup
+     * exists yet, and retention never deletes behind it while it is still unrolled.
+     */
+    public function oldestCheckedAt(): ?\DateTimeImmutable
+    {
+        $value = $this->createQueryBuilder('result')
+            ->select('MIN(result.checkedAt)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        if (null === $value) {
+            return null;
+        }
+
+        // MIN() comes back as a scalar string, not through the field's type. The stored
+        // value is UTC (the app runs in UTC), so parsing it without an offset is safe.
+        return new \DateTimeImmutable((string) $value);
+    }
+
+    /**
+     * Per-monitor, per-region, per-status check tallies for one bucket [start, end).
+     * COUNT and GROUP BY are portable, so the counts happen in SQL; the caller folds the
+     * status rows into up/degraded/down and grouping stays keyed on the region the raw
+     * row carried, so the rollup's unique key is honoured. Not joined to monitor, so a
+     * soft-deleted monitor's rows are still counted.
+     *
+     * @return list<array{monitorId: string, region: string, status: string, checkCount: int}>
+     */
+    public function statusCountsForBucket(\DateTimeImmutable $start, \DateTimeImmutable $end): array
+    {
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $this->createQueryBuilder('result')
+            ->select(
+                'IDENTITY(result.monitor) AS monitorId',
+                'result.region AS region',
+                'result.status AS status',
+                'COUNT(result.id) AS checkCount',
+            )
+            ->andWhere('result.checkedAt >= :start')
+            ->andWhere('result.checkedAt < :end')
+            ->setParameter('start', $start)
+            ->setParameter('end', $end)
+            ->groupBy('result.monitor')
+            ->addGroupBy('result.region')
+            ->addGroupBy('result.status')
+            ->getQuery()
+            ->getArrayResult();
+
+        return array_map(static function (array $row): array {
+            $status = $row['status'];
+
+            return [
+                'monitorId' => (string) $row['monitorId'],
+                'region' => (string) $row['region'],
+                'status' => $status instanceof CheckStatus ? $status->value : (string) $status,
+                'checkCount' => (int) $row['checkCount'],
+            ];
+        }, $rows);
+    }
+
+    /**
+     * Per-monitor, per-region min, max and average latency for one bucket [start, end),
+     * over the non-null latencies only. MIN, MAX and AVG are portable, so these belong
+     * in SQL; the p95 does not and is computed in PHP from latencySamplesForBucket. A
+     * monitor whose every check in the bucket timed out is simply absent here.
+     *
+     * @return list<array{monitorId: string, region: string, latencyMinMs: int, latencyMaxMs: int, latencyAvgMs: float}>
+     */
+    public function latencyStatsForBucket(\DateTimeImmutable $start, \DateTimeImmutable $end): array
+    {
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $this->createQueryBuilder('result')
+            ->select(
+                'IDENTITY(result.monitor) AS monitorId',
+                'result.region AS region',
+                'MIN(result.latencyMs) AS latencyMinMs',
+                'MAX(result.latencyMs) AS latencyMaxMs',
+                'AVG(result.latencyMs) AS latencyAvgMs',
+            )
+            ->andWhere('result.checkedAt >= :start')
+            ->andWhere('result.checkedAt < :end')
+            ->andWhere('result.latencyMs IS NOT NULL')
+            ->setParameter('start', $start)
+            ->setParameter('end', $end)
+            ->groupBy('result.monitor')
+            ->addGroupBy('result.region')
+            ->getQuery()
+            ->getArrayResult();
+
+        return array_map(static fn (array $row): array => [
+            'monitorId' => (string) $row['monitorId'],
+            'region' => (string) $row['region'],
+            'latencyMinMs' => (int) $row['latencyMinMs'],
+            'latencyMaxMs' => (int) $row['latencyMaxMs'],
+            'latencyAvgMs' => (float) $row['latencyAvgMs'],
+        ], $rows);
+    }
+
+    /**
+     * The non-null latency samples for one bucket [start, end), monitor and region
+     * ordered, each ascending — the raw material for the p95, computed in PHP because
+     * the nearest-rank percentile is not portable SQL. The caller groups by
+     * monitor+region; within a group the samples are already sorted.
+     *
+     * @return list<array{monitorId: string, region: string, latencyMs: int}>
+     */
+    public function latencySamplesForBucket(\DateTimeImmutable $start, \DateTimeImmutable $end): array
+    {
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $this->createQueryBuilder('result')
+            ->select(
+                'IDENTITY(result.monitor) AS monitorId',
+                'result.region AS region',
+                'result.latencyMs AS latencyMs',
+            )
+            ->andWhere('result.checkedAt >= :start')
+            ->andWhere('result.checkedAt < :end')
+            ->andWhere('result.latencyMs IS NOT NULL')
+            ->setParameter('start', $start)
+            ->setParameter('end', $end)
+            ->orderBy('result.monitor', 'ASC')
+            ->addOrderBy('result.region', 'ASC')
+            ->addOrderBy('result.latencyMs', 'ASC')
+            ->getQuery()
+            ->getArrayResult();
+
+        return array_map(static fn (array $row): array => [
+            'monitorId' => (string) $row['monitorId'],
+            'region' => (string) $row['region'],
+            'latencyMs' => (int) $row['latencyMs'],
+        ], $rows);
+    }
+
+    /**
+     * Up to $limit ids of raw rows whose checkedAt is before $cutoff, oldest first — one
+     * page of the retention delete. Rides idx_check_result_checked_at.
+     *
+     * @return list<string>
+     */
+    public function idsBefore(\DateTimeImmutable $cutoff, int $limit): array
+    {
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $this->createQueryBuilder('result')
+            ->select('result.id AS id')
+            ->andWhere('result.checkedAt < :cutoff')
+            ->setParameter('cutoff', $cutoff)
+            ->orderBy('result.checkedAt', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getArrayResult();
+
+        return array_map(static fn (array $row): string => (string) $row['id'], $rows);
+    }
+
+    /**
+     * Hard-delete the raw rows with the given ids and return how many were removed. DQL
+     * DELETE carries no LIMIT, so the retention step pages the ids in and deletes them
+     * by id; an empty page deletes nothing.
+     *
+     * @param list<string> $ids
+     */
+    public function deleteByIds(array $ids): int
+    {
+        if ([] === $ids) {
+            return 0;
+        }
+
+        /** @var int $affected */
+        $affected = $this->createQueryBuilder('result')
+            ->delete()
+            ->andWhere('result.id IN (:ids)')
+            ->setParameter('ids', $ids, ArrayParameterType::STRING)
+            ->getQuery()
+            ->execute();
+
+        return $affected;
     }
 }
