@@ -6,10 +6,6 @@ import { decodeJwt } from "jose";
 // forwards it as an Authorization bearer; no component sees it.
 export const TOKEN_COOKIE = "pulse_token";
 
-// The Mercure subscriber token — a separate, httpOnly cookie the browser's
-// EventSource sends to the hub. Minted in middleware, cleared here on logout.
-export const MERCURE_COOKIE = "mercureAuthorization";
-
 const isProduction = process.env.NODE_ENV === "production";
 
 /** The bearer token for the current request, if the operator is signed in. */
@@ -61,9 +57,8 @@ export async function getCurrentUsername(): Promise<string | null> {
   return null;
 }
 
-/** Clears the session — both the API token and the Mercure subscriber token. */
+/** Clears the session by removing the API token cookie. */
 export async function clearSession(): Promise<void> {
   const store = await cookies();
   store.delete(TOKEN_COOKIE);
-  store.delete(MERCURE_COOKIE);
 }

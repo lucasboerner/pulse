@@ -3,8 +3,7 @@ import { getCurrentUsername } from "@/lib/auth";
 import type { InstanceUser, Monitor } from "@/features/monitor/types";
 import { relativeTime } from "@/features/monitor/lib/status";
 import { PageHeader } from "@/features/shell/components/page-header";
-import { StatRow } from "@/features/monitor/components/stat-row";
-import { MonitorList } from "@/features/monitor/components/monitor-list";
+import { OverviewLive } from "@/features/monitor/components/overview-live";
 import { MonitorEmptyState } from "@/features/monitor/components/monitor-empty-state";
 import { NewMonitorButton } from "@/features/monitor/components/new-monitor-button";
 
@@ -35,10 +34,7 @@ export default async function OverviewPage() {
         {monitors.length === 0 ? (
           <MonitorEmptyState users={users} currentUserId={currentUserId} />
         ) : (
-          <>
-            <StatRow monitors={monitors} />
-            <MonitorList monitors={monitors} />
-          </>
+          <OverviewLive monitors={monitors} />
         )}
       </div>
     </>

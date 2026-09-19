@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import type { InstanceUser, Monitor } from "@/features/monitor/types";
 import { displayStatus, hostFromUrl } from "@/features/monitor/lib/status";
+import { useLiveMonitors } from "@/features/monitor/live/monitor-live-context";
 import { MonitorRow, MONITOR_TABLE_GRID } from "@/features/monitor/components/monitor-row";
 import { cn } from "@/lib/utils";
 
@@ -40,9 +41,13 @@ export function MonitorsTable({ monitors, users, currentUserId, now }: MonitorsT
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("all");
 
+  // Merge in any live status pushed over Mercure before filtering, so a row flips
+  // and the status filter both track the pushed check result in place.
+  const live = useLiveMonitors(monitors);
+
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return monitors.filter((monitor) => {
+    return live.filter((monitor) => {
       if (status !== "all" && displayStatus(monitor) !== status) return false;
       if (!term) return true;
       return (
@@ -51,7 +56,7 @@ export function MonitorsTable({ monitors, users, currentUserId, now }: MonitorsT
         hostFromUrl(monitor.url).toLowerCase().includes(term)
       );
     });
-  }, [monitors, query, status]);
+  }, [live, query, status]);
 
   const isFiltering = query.trim() !== "" || status !== "all";
 
@@ -87,7 +92,7 @@ export function MonitorsTable({ monitors, users, currentUserId, now }: MonitorsT
           </Select>
         </div>
         <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">
-          {filtered.length} of {monitors.length}
+          {filtered.length} of {live.length}
         </span>
       </div>
 
