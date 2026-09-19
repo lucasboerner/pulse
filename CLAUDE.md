@@ -130,9 +130,6 @@ pulse/
 - **Primary Keys**: UUID v7 via `App\Entity\EntityIdTrait`, never auto-increment
 - **No authentication yet**: the template ships without auth. See
   `docs/frontend/data-and-forms.md` → Authentication for where the seam is.
-- **Example code**: files marked `EXAMPLE — safe to delete` are a working vertical
-  slice, not scaffolding you must keep. Find them all with
-  `grep -rl 'EXAMPLE — safe to delete' .`
 - **Mercure hub is 1.0**: `dunglas/mercure` enforces RFC 9068, so every publisher and (future) subscriber JWT must be protocol `1.0` with a trusted `iss` (`https://localhost` by default), an `aud` pinned to the exact URL that side posts to, and a `typ: at+jwt` header — the legacy bundle-default token is rejected with a 401.
 - **Async code needs a worker restart**: `worker` and `scheduler` run long-lived `messenger:consume`, so after changing message-handler code run `docker compose restart worker scheduler` before testing the async path live — the live-mounted edit alone is not picked up by the running process.
 - **New fields on an existing API resource need an `api` restart**: adding/removing a serialized property or `#[Groups]` on an existing resource is silently ignored by the running FrankenPHP worker (it caches serialization metadata in memory); `cache:clear` alone is not enough — run `docker compose restart api`. A brand-new resource/route is picked up without it.
