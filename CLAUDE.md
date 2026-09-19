@@ -117,6 +117,9 @@ pulse/
 - **JSON:API attribute naming**: a resource property named `type` is written and read as
   `_type` in payloads — API Platform reserves `type` for the resource type — so `Monitor`'s
   `type` field is `_type` over the wire.
+- **JSON:API omits null top-level attributes**: a null resource attribute is absent from the
+  payload (reads as `undefined` after flattening), while nulls inside nested arrays stay — so
+  compare nullable frontend reads with `== null`, never `=== null`.
 - **API resources are DTOs**: the exposed shapes live in `api/src/ApiResource/` (e.g.
   `MonitorResource`) and map onto entities with Symfony's Object Mapper via `#[Map]` +
   `stateOptions: new Options(entityClass: …)`. The read direction reads the entity's `#[Map]`,
