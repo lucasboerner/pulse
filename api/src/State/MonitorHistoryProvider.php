@@ -10,20 +10,26 @@ use App\ApiResource\MonitorHistoryResource;
 use App\Entity\Monitor;
 use App\Enum\CheckStatus;
 use App\Repository\CheckResultRepository;
+use App\Repository\CheckRollupRepository;
 use App\Repository\IncidentRepository;
 use App\Repository\MonitorRepository;
+use App\Rollup\HistoryAggregator;
 
 /**
- * Builds the detail page's aggregate for one monitor over a fixed 24-hour window.
+ * Builds the detail page's aggregate for one monitor.
  *
- * All the arithmetic — counts, uptime, median, p95 and the 48 half-hour buckets —
- * runs in PHP over the scalar rows the repository returns, never in SQL: the test
- * suite is SQLite while production is PostgreSQL, and PERCENTILE_CONT / date_trunc
- * exist on only one of them. A sorted array of integers gives the median and the
- * p95 portably, and bucketing by timestamp costs nothing at these row counts.
+ * The 24-hour window — counts, uptime, median, p95 and the 48 half-hour buckets, plus
+ * the recent checks — is computed in PHP over raw rows, which all sit inside the
+ * retention window. The long windows do not: the 7- and 30-day uptime and the 90-day
+ * daily strip read hourly rollups (kept indefinitely) plus a short raw tail for the
+ * hour not yet rolled up, so a 7-day retention delete never blanks them. The wire shape
+ * is unchanged; only the source of those numbers moved.
  *
- * A missing or soft-deleted monitor returns null, which API Platform turns into a
- * 404.
+ * All arithmetic stays in PHP over scalar rows, never in SQL: the test suite is SQLite
+ * while production is PostgreSQL, and PERCENTILE_CONT / date_trunc exist on only one of
+ * them.
+ *
+ * A missing or soft-deleted monitor returns null, which API Platform turns into a 404.
  *
  * @implements ProviderInterface<MonitorHistoryResource>
  */
@@ -34,14 +40,15 @@ final readonly class MonitorHistoryProvider implements ProviderInterface
     private const int RECENT_LIMIT = 10;
     private const int INCIDENT_WINDOW_DAYS = 30;
     private const int DAILY_STRIP_DAYS = 90;
-    private const int DAY_SECONDS = 86400;
     private const int UPTIME_7D = 7;
     private const int UPTIME_30D = 30;
 
     public function __construct(
         private MonitorRepository $monitors,
         private CheckResultRepository $checkResults,
+        private CheckRollupRepository $rollups,
         private IncidentRepository $incidents,
+        private HistoryAggregator $aggregator,
     ) {
     }
 
@@ -124,83 +131,37 @@ final readonly class MonitorHistoryProvider implements ProviderInterface
         }
         $resource->series = $series;
 
-        // Longer-window uptime, folded from the fleet-wide GROUP BY COUNT for the
-        // single monitor this page is about.
-        $resource->uptimeRatio7d = $this->uptimeRatioFor(
-            $this->checkResults->uptimeCountsSince($windowEnd->sub(new \DateInterval('P'.self::UPTIME_7D.'D'))),
-            $resource->monitorId,
-        );
-        $resource->uptimeRatio30d = $this->uptimeRatioFor(
-            $this->checkResults->uptimeCountsSince($windowEnd->sub(new \DateInterval('P'.self::UPTIME_30D.'D'))),
-            $resource->monitorId,
-        );
+        // Long-window reads: hourly rollups (kept indefinitely) plus a raw tail for the
+        // hour not yet rolled up. The rollups are fetched from the oldest window edge —
+        // the 90-day strip — and the shorter uptime windows filter within them. The raw
+        // tail begins after the newest rolled-up bucket so the two never overlap.
+        $dailyWindowStart = (new \DateTimeImmutable('today'))->sub(new \DateInterval('P'.(self::DAILY_STRIP_DAYS - 1).'D'));
+        $watermark = $this->rollups->newestBucketStart();
+        $rawTailStart = null !== $watermark ? $watermark->add(new \DateInterval('PT1H')) : $dailyWindowStart;
 
-        // The 90-day daily strip, worst-status-wins per calendar day. Bucket
-        // boundaries align to local midnight so a "day" is a calendar day, not a
-        // rolling 24-hour window; the loop mirrors the half-hour bucketing above.
-        $resource->dailyStatus = $this->dailyStatus($monitor);
+        $rollupBuckets = $this->rollups->statusCountsForMonitorSince($monitor, $dailyWindowStart);
+        $rawTail = $this->checkResults->statusRowsForSince($monitor, $rawTailStart);
+
+        $resource->uptimeRatio7d = $this->ratio(
+            $this->aggregator->uptimeCounts($rollupBuckets, $rawTail, $windowEnd->sub(new \DateInterval('P'.self::UPTIME_7D.'D'))),
+        );
+        $resource->uptimeRatio30d = $this->ratio(
+            $this->aggregator->uptimeCounts($rollupBuckets, $rawTail, $windowEnd->sub(new \DateInterval('P'.self::UPTIME_30D.'D'))),
+        );
+        $resource->dailyStatus = $this->aggregator->dailyStrip($rollupBuckets, $rawTail, $dailyWindowStart, self::DAILY_STRIP_DAYS);
 
         return $resource;
     }
 
     /**
-     * Fold the fleet-wide status counts down to one monitor's uptime ratio, or null
-     * when it has no check in the window.
+     * The uptime ratio from a folded {up, total} pair, or null when the window holds no
+     * check.
      *
-     * @param list<array{monitorId: string, status: string, checkCount: int}> $rows
+     * @param array{up: int, total: int} $counts
      */
-    private function uptimeRatioFor(array $rows, string $monitorId): ?float
+    private function ratio(array $counts): ?float
     {
-        $up = 0;
-        $total = 0;
-        foreach ($rows as $row) {
-            if ($row['monitorId'] !== $monitorId) {
-                continue;
-            }
-
-            $total += $row['checkCount'];
-            if (CheckStatus::Up->value === $row['status']) {
-                $up += $row['checkCount'];
-            }
-        }
-
-        return $total > 0 ? $up / $total : null;
-    }
-
-    /**
-     * The 90 calendar-day status strip for a monitor, oldest first: each day carries
-     * the worst status seen (down over degraded over up), or null when no check ran.
-     *
-     * @return list<array{day: string, status: string|null}>
-     */
-    private function dailyStatus(Monitor $monitor): array
-    {
-        $windowStart = (new \DateTimeImmutable('today'))->sub(new \DateInterval('P'.(self::DAILY_STRIP_DAYS - 1).'D'));
-        $windowStartTs = $windowStart->getTimestamp();
-
-        /** @var list<int|null> $worstRank a null day has seen no check */
-        $worstRank = array_fill(0, self::DAILY_STRIP_DAYS, null);
-        foreach ($this->checkResults->statusRowsForSince($monitor, $windowStart) as $row) {
-            $index = intdiv($row['checkedAt']->getTimestamp() - $windowStartTs, self::DAY_SECONDS);
-            if ($index < 0 || $index >= self::DAILY_STRIP_DAYS) {
-                continue;
-            }
-
-            $rank = $this->statusRank($row['status']);
-            if (null === $worstRank[$index] || $rank > $worstRank[$index]) {
-                $worstRank[$index] = $rank;
-            }
-        }
-
-        $strip = [];
-        for ($index = 0; $index < self::DAILY_STRIP_DAYS; ++$index) {
-            $strip[] = [
-                'day' => $windowStart->add(new \DateInterval('P'.$index.'D'))->format('Y-m-d'),
-                'status' => $this->rankStatus($worstRank[$index]),
-            ];
-        }
-
-        return $strip;
+        return $counts['total'] > 0 ? $counts['up'] / $counts['total'] : null;
     }
 
     /**
