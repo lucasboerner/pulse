@@ -9,19 +9,24 @@ use ApiPlatform\State\ProviderInterface;
 use App\ApiResource\MetricsResource;
 use App\Enum\CheckStatus;
 use App\Repository\CheckResultRepository;
+use App\Repository\CheckRollupRepository;
 use App\Repository\IncidentRepository;
 use App\Repository\MonitorRepository;
+use App\Rollup\HistoryAggregator;
 
 /**
  * Builds the fleet-wide overview aggregate in one pass over a handful of portable
  * queries.
  *
- * The cheap fleet numbers come from GROUP BY COUNT / AVG queries; the response series
- * and the per-monitor daily strips are bucketed in PHP over scalar rows, because
- * PERCENTILE_CONT and date_trunc exist on PostgreSQL but not on the SQLite test schema.
- * The daily strips for every monitor come from a single dailyStatusRowsSince scan, not
- * one query per monitor, and the median per response bucket uses the same nearest-rank
- * percentile() the detail provider uses.
+ * The 24-hour response series and the per-monitor average latency read raw rows, which
+ * sit inside the retention window. The 30-day uptime — fleet-wide and per monitor — and
+ * each monitor's 45-day daily strip read hourly rollups (kept indefinitely) plus a
+ * short raw tail for the hour not yet rolled up, so a 7-day retention delete never
+ * collapses them. The wire shape is unchanged; only the source of those numbers moved.
+ *
+ * Everything is bucketed in PHP over scalar rows, because PERCENTILE_CONT and date_trunc
+ * exist on PostgreSQL but not on the SQLite test schema. The rollups and the raw tail
+ * fold through one shared HistoryAggregator so the two providers stay in step.
  *
  * @implements ProviderInterface<MetricsResource>
  */
@@ -30,14 +35,15 @@ final readonly class MetricsProvider implements ProviderInterface
     private const int SERIES_BUCKET_COUNT = 48;
     private const int SERIES_BUCKET_SECONDS = 1800;
     private const int DAILY_STRIP_DAYS = 45;
-    private const int DAY_SECONDS = 86400;
     private const int UPTIME_WINDOW_DAYS = 30;
     private const int RECENT_INCIDENT_LIMIT = 8;
 
     public function __construct(
         private MonitorRepository $monitors,
         private CheckResultRepository $checkResults,
+        private CheckRollupRepository $rollups,
         private IncidentRepository $incidents,
+        private HistoryAggregator $aggregator,
     ) {
     }
 
@@ -64,16 +70,8 @@ final readonly class MetricsProvider implements ProviderInterface
             }
         }
 
-        // Fleet uptime and per-monitor uptime from one 30-day GROUP BY COUNT.
-        $since30d = $now->sub(new \DateInterval('P'.self::UPTIME_WINDOW_DAYS.'D'));
-        [$uptimePerMonitor, $fleetUp, $fleetTotal] = $this->foldUptimeCounts(
-            $this->checkResults->uptimeCountsSince($since30d),
-        );
-        $resource->uptimeRatio30d = $fleetTotal > 0 ? $fleetUp / $fleetTotal : null;
-
         // 24-hour window shared by the response series, the fleet average and the
         // per-monitor averages, so every response figure covers the same span.
-        $seriesEnd = $now;
         $seriesStart = $now->sub(new \DateInterval('PT'.(self::SERIES_BUCKET_COUNT * self::SERIES_BUCKET_SECONDS).'S'));
         $latencyRows = $this->checkResults->latencyRowsSince($seriesStart);
 
@@ -85,20 +83,39 @@ final readonly class MetricsProvider implements ProviderInterface
             $avgPerMonitor[$row['monitorId']] = (int) round($row['avgLatencyMs']);
         }
 
-        // One scan feeds every monitor's daily strip. Bucket boundaries are aligned to
-        // local midnight so a "day" is a calendar day, not a rolling 24-hour window.
+        // Long-window reads: hourly rollups plus a raw tail for the hour not yet rolled
+        // up. The rollups are fetched from the oldest window edge — the 45-day strip —
+        // and the 30-day uptime filters within them; the raw tail begins after the newest
+        // rolled-up bucket so the two never overlap. Bucket boundaries are aligned to
+        // local midnight so a "day" is a calendar day. The counts are folded per monitor;
+        // the fleet uptime sums those pairs across every monitor with data, soft-deleted
+        // ones included, matching the raw counts this replaced.
         $dailyStart = (new \DateTimeImmutable('today'))->sub(new \DateInterval('P'.(self::DAILY_STRIP_DAYS - 1).'D'));
-        $dailyLabels = $this->dayLabels($dailyStart, self::DAILY_STRIP_DAYS);
-        $dailyWorst = $this->foldDailyStatus(
-            $this->checkResults->dailyStatusRowsSince($dailyStart),
-            $dailyStart,
-            self::DAILY_STRIP_DAYS,
-        );
+        $since30d = $now->sub(new \DateInterval('P'.self::UPTIME_WINDOW_DAYS.'D'));
+        $watermark = $this->rollups->newestBucketStart();
+        $rawTailStart = null !== $watermark ? $watermark->add(new \DateInterval('PT1H')) : $dailyStart;
+
+        $rollupByMonitor = $this->groupRollups($this->rollups->statusCountsSince($dailyStart));
+        $rawByMonitor = $this->groupRawTail($this->checkResults->dailyStatusRowsSince($rawTailStart));
+
+        $fleetUp = 0;
+        $fleetTotal = 0;
+        $uptimeByMonitor = [];
+        foreach (array_keys($rollupByMonitor + $rawByMonitor) as $monitorId) {
+            $counts = $this->aggregator->uptimeCounts(
+                $rollupByMonitor[$monitorId] ?? [],
+                $rawByMonitor[$monitorId] ?? [],
+                $since30d,
+            );
+            $fleetUp += $counts['up'];
+            $fleetTotal += $counts['total'];
+            $uptimeByMonitor[$monitorId] = $counts['total'] > 0 ? $counts['up'] / $counts['total'] : null;
+        }
+        $resource->uptimeRatio30d = $fleetTotal > 0 ? $fleetUp / $fleetTotal : null;
 
         $rollups = [];
         foreach ($monitors as $monitor) {
             $monitorId = (string) $monitor->getId();
-            $counts = $uptimePerMonitor[$monitorId] ?? ['up' => 0, 'total' => 0];
 
             $rollups[] = [
                 'monitorId' => $monitorId,
@@ -107,8 +124,13 @@ final readonly class MetricsProvider implements ProviderInterface
                 'enabled' => $monitor->isEnabled(),
                 'lastStatus' => $monitor->getLastStatus()?->value,
                 'avgLatencyMs' => $avgPerMonitor[$monitorId] ?? null,
-                'uptimeRatio30d' => $counts['total'] > 0 ? $counts['up'] / $counts['total'] : null,
-                'dailyStatus' => $this->dailyStrip($dailyLabels, $dailyWorst[$monitorId] ?? []),
+                'uptimeRatio30d' => $uptimeByMonitor[$monitorId] ?? null,
+                'dailyStatus' => $this->aggregator->dailyStrip(
+                    $rollupByMonitor[$monitorId] ?? [],
+                    $rawByMonitor[$monitorId] ?? [],
+                    $dailyStart,
+                    self::DAILY_STRIP_DAYS,
+                ),
             ];
         }
         $resource->monitors = $rollups;
@@ -120,33 +142,47 @@ final readonly class MetricsProvider implements ProviderInterface
     }
 
     /**
-     * Fold the per-monitor, per-status counts into a per-monitor {up, total} map and
-     * the fleet-wide up and total tallies.
+     * Group the cross-monitor rollup rows by monitor into the per-monitor slices the
+     * aggregator folds.
      *
-     * @param list<array{monitorId: string, status: string, checkCount: int}> $rows
+     * @param list<array{monitorId: string, bucketStart: \DateTimeImmutable, upCount: int, degradedCount: int, downCount: int}> $rows
      *
-     * @return array{0: array<string, array{up: int, total: int}>, 1: int, 2: int}
+     * @return array<string, list<array{bucketStart: \DateTimeImmutable, upCount: int, degradedCount: int, downCount: int}>>
      */
-    private function foldUptimeCounts(array $rows): array
+    private function groupRollups(array $rows): array
     {
-        $perMonitor = [];
-        $fleetUp = 0;
-        $fleetTotal = 0;
-
+        $grouped = [];
         foreach ($rows as $row) {
-            $monitorId = $row['monitorId'];
-            $count = $row['checkCount'];
-            $perMonitor[$monitorId] ??= ['up' => 0, 'total' => 0];
-            $perMonitor[$monitorId]['total'] += $count;
-            $fleetTotal += $count;
-
-            if (CheckStatus::Up->value === $row['status']) {
-                $perMonitor[$monitorId]['up'] += $count;
-                $fleetUp += $count;
-            }
+            $grouped[$row['monitorId']][] = [
+                'bucketStart' => $row['bucketStart'],
+                'upCount' => $row['upCount'],
+                'degradedCount' => $row['degradedCount'],
+                'downCount' => $row['downCount'],
+            ];
         }
 
-        return [$perMonitor, $fleetUp, $fleetTotal];
+        return $grouped;
+    }
+
+    /**
+     * Group the cross-monitor raw tail rows by monitor into the per-monitor slices the
+     * aggregator folds.
+     *
+     * @param list<array{monitorId: string, checkedAt: \DateTimeImmutable, status: CheckStatus}> $rows
+     *
+     * @return array<string, list<array{checkedAt: \DateTimeImmutable, status: CheckStatus}>>
+     */
+    private function groupRawTail(array $rows): array
+    {
+        $grouped = [];
+        foreach ($rows as $row) {
+            $grouped[$row['monitorId']][] = [
+                'checkedAt' => $row['checkedAt'],
+                'status' => $row['status'],
+            ];
+        }
+
+        return $grouped;
     }
 
     /**
@@ -206,70 +242,6 @@ final readonly class MetricsProvider implements ProviderInterface
     }
 
     /**
-     * Bucket cross-monitor status rows into per-monitor, per-day worst-status ranks.
-     *
-     * @param list<array{monitorId: string, checkedAt: \DateTimeImmutable, status: CheckStatus}> $rows
-     *
-     * @return array<string, array<int, int>> monitorId => (dayIndex => worst rank)
-     */
-    private function foldDailyStatus(array $rows, \DateTimeImmutable $windowStart, int $days): array
-    {
-        $windowStartTs = $windowStart->getTimestamp();
-        $worst = [];
-
-        foreach ($rows as $row) {
-            $index = intdiv($row['checkedAt']->getTimestamp() - $windowStartTs, self::DAY_SECONDS);
-            if ($index < 0 || $index >= $days) {
-                continue;
-            }
-
-            $monitorId = $row['monitorId'];
-            $rank = $this->statusRank($row['status']);
-            if (!isset($worst[$monitorId][$index]) || $rank > $worst[$monitorId][$index]) {
-                $worst[$monitorId][$index] = $rank;
-            }
-        }
-
-        return $worst;
-    }
-
-    /**
-     * The day labels for a strip, oldest first.
-     *
-     * @return list<string>
-     */
-    private function dayLabels(\DateTimeImmutable $windowStart, int $days): array
-    {
-        $labels = [];
-        for ($index = 0; $index < $days; ++$index) {
-            $labels[] = $windowStart->add(new \DateInterval('P'.$index.'D'))->format('Y-m-d');
-        }
-
-        return $labels;
-    }
-
-    /**
-     * Assemble one monitor's strip from the shared labels and its worst-rank map.
-     *
-     * @param list<string>    $labels
-     * @param array<int, int> $worstByDay
-     *
-     * @return list<array{day: string, status: string|null}>
-     */
-    private function dailyStrip(array $labels, array $worstByDay): array
-    {
-        $strip = [];
-        foreach ($labels as $index => $day) {
-            $strip[] = [
-                'day' => $day,
-                'status' => $this->rankStatus($worstByDay[$index] ?? null),
-            ];
-        }
-
-        return $strip;
-    }
-
-    /**
      * @return list<array{monitorName: string, severity: string, startedAt: \DateTimeImmutable, endedAt: \DateTimeImmutable|null, cause: string|null}>
      */
     private function recentIncidents(): array
@@ -291,7 +263,7 @@ final readonly class MetricsProvider implements ProviderInterface
     /**
      * The value at the given percentile of a sorted integer array, nearest-rank —
      * integer in, integer out, identical on both database engines. Null for an empty
-     * array. (Copied from MonitorHistoryProvider; there is no shared base.).
+     * array.
      *
      * @param list<int> $sorted
      */
@@ -306,24 +278,5 @@ final readonly class MetricsProvider implements ProviderInterface
         $index = max(0, min($count - 1, $rank - 1));
 
         return $sorted[$index];
-    }
-
-    private function statusRank(CheckStatus $status): int
-    {
-        return match ($status) {
-            CheckStatus::Up => 0,
-            CheckStatus::Degraded => 1,
-            CheckStatus::Down => 2,
-        };
-    }
-
-    private function rankStatus(?int $rank): ?string
-    {
-        return match ($rank) {
-            0 => CheckStatus::Up->value,
-            1 => CheckStatus::Degraded->value,
-            2 => CheckStatus::Down->value,
-            default => null,
-        };
     }
 }
