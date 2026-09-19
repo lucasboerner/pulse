@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import type { ApiResource } from "@/types/api";
+import { getToken } from "@/lib/auth";
 
 // Server Components run inside the `app` container and reach the API over the
 // internal Docker network hostname, not the browser-facing domain.
@@ -85,15 +87,27 @@ export class ApiError extends Error {
  * Component's error boundary (error.tsx) can render it.
  */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  // The bearer token from the httpOnly cookie is attached here, in the one place
+  // that talks to the API. A caller may still override it via options.headers.
+  const token = await getToken();
   const response = await fetch(`${INTERNAL_API_URL}${path}`, {
     headers: {
       Accept: JSON_API_MEDIA_TYPE,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     ...(options.tags
       ? { next: { tags: options.tags, revalidate: options.revalidate } }
       : { cache: "no-store" as const }),
   });
+
+  if (response.status === 401) {
+    // Central 401 handling: the token is missing, expired or rejected. Bounce
+    // through /logout, which clears the cookie before landing on /login — a
+    // straight redirect to /login would loop past the middleware gate, which
+    // only judges the token structurally.
+    redirect("/logout");
+  }
 
   if (!response.ok) {
     throw new ApiError(`API request to ${path} failed with status ${response.status}`, response.status);

@@ -27,3 +27,12 @@ export interface JsonApiError {
   detail?: string;
   source?: JsonApiErrorSource;
 }
+
+// The envelope every Server Action returns. A client form maps `fieldErrors`
+// onto its fields (from zod or the API's 422 via source.pointer), `error` onto a
+// top-level alert, and `data` onto the success path (close modal, toast).
+export interface ActionResult<T> {
+  data?: T;
+  error?: string;
+  fieldErrors?: Record<string, string>;
+}
