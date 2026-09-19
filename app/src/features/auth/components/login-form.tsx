@@ -16,7 +16,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-export function LoginForm() {
+interface LoginFormProps {
+  // The post-login destination carried through from the /login URL.
+  next?: string;
+}
+
+export function LoginForm({ next }: LoginFormProps) {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
     defaultValues: { username: "", password: "" },
@@ -24,7 +29,7 @@ export function LoginForm() {
   const { isSubmitting, errors } = form.formState;
 
   async function onSubmit(values: LoginFormValues) {
-    const result = await loginAction(values);
+    const result = await loginAction(values, next);
     // Success redirects server-side, so only a failure reaches here.
     if (result?.fieldErrors) {
       for (const [field, message] of Object.entries(result.fieldErrors)) {
