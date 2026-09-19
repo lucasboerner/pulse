@@ -1,0 +1,94 @@
+name: Publish images
+
+# Publishes the two production images to the GitHub Container Registry.
+#
+# Triggers on a pushed version tag (v*), and on a manual dispatch — run the
+# dispatch against a tag ref (not a branch) so the semver tags below resolve.
+#
+# compose.selfhost.yaml pulls ghcr.io/lucasboerner/pulse-{api,app}:${IMAGE_TAG:-latest},
+# so `latest` must always resolve to a working image: it is moved only by a
+# non-prerelease tag (a tag containing a hyphen, e.g. v1.0.0-rc.1, is a
+# prerelease and publishes only its full-version tag).
+#
+# Images are built for linux/amd64 and linux/arm64 (self-hosters run on ARM VPS
+# instances and Apple Silicon). The arm64 half is emulated via QEMU and slow;
+# the GitHub Actions layer cache keeps reruns cheaper.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: pulse-api
+            context: api
+            target: frankenphp_prod
+          - image: pulse-app
+            context: app
+            target: runner
+    steps:
+      - uses: actions/checkout@v4
+
+      # Emulation for the linux/arm64 half of the manifest.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/lucasboerner/${{ matrix.image }}
+          # latest is controlled explicitly below, never auto-assigned.
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # A clean multi-arch index without provenance attestations, so the
+          # package page shows only the two real platforms.
+          provenance: false
+          # Per-image layer cache, so the two builds never evict each other.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # pulse-app only: pins NEXT_SERVER_ACTIONS_ENCRYPTION_KEY so Server
+          # Action IDs stay stable across releases. The mount is optional, so an
+          # absent repository secret still builds — it just churns those IDs
+          # between releases (open tabs break after a redeploy). Create it with
+          # `openssl rand -base64 32`; see the README release section.
+          secrets: ${{ (matrix.image == 'pulse-app' && secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY != '') && format('next_actions_key={0}', secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY) || '' }}
