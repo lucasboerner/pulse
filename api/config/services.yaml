@@ -7,12 +7,17 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    # How many days of raw check_result rows to keep before the rollup job deletes them.
+    # Widening this is a configuration change; the deleted rows are gone (env: .env).
+    app.raw_retention_days: '%env(int:PULSE_RAW_RETENTION_DAYS)%'
 
 services:
     # default configuration for services in *this* file
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.
         autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+        bind:
+            int $rawRetentionDays: '%app.raw_retention_days%'
 
     # Each check type is one strategy; tagging them lets the resolver receive the
     # whole set and pick the one that supports a monitor's type.
