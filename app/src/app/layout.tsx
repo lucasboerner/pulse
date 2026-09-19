@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { JetBrains_Mono } from "next/font/google";
 import "@/app/globals.css";
 import { cn } from "@/lib/utils";
 import { Providers } from "@/components/providers";
 import React from "react";
 
-// The font is exposed as a CSS variable so globals.css can map it onto Tailwind's
-// --font-sans token, rather than each component reaching for the font class.
-const sans = Inter({ subsets: ["latin"], variable: "--font-app-sans" });
+// JetBrains Mono is the whole identity — there is no separate sans. The variable
+// font (300–700) is exposed as a CSS variable so globals.css can map it onto
+// Tailwind's --font-sans token, making the entire tree monospaced by default.
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-app-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "Pulse",
-  description: "Pulse",
+  title: "Pulse — Uptime Monitoring",
+  description: "Self-hosted uptime monitoring for domains and the services attached to them.",
 };
 
 export default function RootLayout({
@@ -24,7 +29,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full", "antialiased", "font-sans", sans.variable)}
+      className={cn("h-full", "antialiased", "font-sans", mono.variable)}
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
