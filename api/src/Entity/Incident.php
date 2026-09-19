@@ -4,22 +4,28 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\ApiResource\IncidentResource;
 use App\Enum\IncidentSeverity;
 use App\Repository\IncidentRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Timestampable\Traits\TimestampableEntity;
+use Symfony\Component\ObjectMapper\Attribute\Map;
 
 /**
  * One outage. An incident opens on the first failed check and closes on the first
  * successful one. The Ongoing, Degraded and Resolved labels are derived from
  * ended_at and severity, never stored: ended_at null with severity down is Ongoing,
  * ended_at null with degraded is Degraded, otherwise Resolved.
+ *
+ * The public shape is App\ApiResource\IncidentResource, read-only. The #[Map] here
+ * drives the read direction (entity to resource); there is no write direction.
  */
 #[ORM\Entity(repositoryClass: IncidentRepository::class)]
 #[ORM\Table(name: 'incident')]
 #[ORM\Index(name: 'idx_incident_monitor_open', columns: ['monitor_id', 'ended_at'])]
 #[ORM\Index(name: 'idx_incident_started', columns: ['started_at'])]
+#[Map(target: IncidentResource::class)]
 class Incident
 {
     use EntityIdTrait;
