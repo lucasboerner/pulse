@@ -18,8 +18,14 @@ export function middleware(request: NextRequest): NextResponse {
 
   if (!token) {
     if (isPublic) return NextResponse.next();
+    // Carry the requested path (and query) so the login can land the visitor back
+    // there — an alert mail's deep link must survive the sign-in bounce. The overview
+    // is the default, so `/` is not worth carrying.
+    const target = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    if (target && target !== "/") url.searchParams.set("next", target);
     return NextResponse.redirect(url);
   }
 

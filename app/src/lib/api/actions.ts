@@ -22,7 +22,10 @@ const GENERIC_FAILURE = "The request failed. Please try again.";
 
 // ── Authentication ────────────────────────────────────────────────────────
 
-export async function loginAction(values: LoginFormValues): Promise<ActionResult<never>> {
+export async function loginAction(
+  values: LoginFormValues,
+  next?: string,
+): Promise<ActionResult<never>> {
   const parsed = loginFormSchema.safeParse(values);
   if (!parsed.success) return { fieldErrors: zodFieldErrors(parsed.error) };
 
@@ -49,7 +52,17 @@ export async function loginAction(values: LoginFormValues): Promise<ActionResult
   if (typeof body?.token !== "string") return { error: GENERIC_FAILURE };
 
   await setSessionCookie(body.token);
-  redirect("/");
+  redirect(safeInternalPath(next));
+}
+
+// Accept only a same-origin, relative destination — one that starts with a single
+// slash and not "//" or "/\" (both of which browsers can read as protocol-relative,
+// off-origin). Anything else falls back to the overview: an open redirect through the
+// login is a real one.
+function safeInternalPath(next: string | undefined): string {
+  if (typeof next !== "string") return "/";
+  if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
+  return next;
 }
 
 export async function logoutAction(): Promise<void> {
