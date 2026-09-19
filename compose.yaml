@@ -103,8 +103,11 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=development
-      # Where the browser subscribes for live updates (phase 5 wires the client).
+      # Where the browser subscribes for live updates.
       - MERCURE_PUBLIC_URL=http://mercure.pulse.orb.local/.well-known/mercure
+      # Signs the httpOnly subscriber token the app mints for the browser's
+      # EventSource; must match the hub's keys (mercure service below).
+      - MERCURE_JWT_SECRET=!ChangeThisMercureHubJWTSecretKey!
     volumes:
       - ./app:/app
       - /app/node_modules
