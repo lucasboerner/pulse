@@ -1,0 +1,70 @@
+## 0.1.0 (September 19, 2026)
+  - chore(release): add a ./tag script that cuts version tags
+  - style(login): render the sign-in panel as a Card
+  - docs: note that a new app dependency needs an in-container install
+  - docs(e2e): add a README on running the end-to-end suite
+  - ci: run the Playwright end-to-end suite on pull requests
+  - test(e2e): add the frontend end-to-end specs
+  - test(e2e): add global setup, fixtures and helpers
+  - test(e2e): add Playwright dependency and configuration
+  - chore: add note on secret handling in prod builds
+  - fix(api): keep the JWT passphrase out of the published image
+  - docs: rewrite the README for a self-hoster
+  - feat(fixtures): seed a demonstration fleet
+  - ci: publish api and app images to GHCR on version tags
+  - docs(selfhost): complete .env.example and wire retention through compose
+  - feat(api): generate JWT keys on first boot in the owning container
+  - chore: license the project under MIT
+  - docs: note the rollup ordering and the retention guard
+  - test(rollup): cover the job, the retention traps, and the moved reads
+  - feat(monitor): read long-window history from rollups plus a raw tail
+  - feat(rollup): add the app:checks:roll-up console command
+  - feat(rollup): schedule the hourly rollup on the async transport
+  - feat(rollup): fold elapsed hours into check_rollup with retention
+  - docs: note that changed API resource fields need an api restart
+  - docs: note that JSON:API omits null top-level attributes
+  - feat(dashboard): rebuild overview and detail to the Uptime Monitor design
+  - test(api): cover the incident and history read endpoints
+  - feat(auth): carry the requested path through the login bounce
+  - feat(monitors): the monitor detail page with its history
+  - feat(monitors): aggregate history endpoint for the detail page
+  - feat(incidents): read-only incident resource filtered by monitor
+  - feat(monitors): live status updates over a same-origin Mercure stream
+  - feat(mercure): pass the JWT secret to the app service
+  - feat(monitors): dense table with row toggle, edit and delete
+  - feat(overview): stat row, monitor list and the New Monitor modal
+  - feat(shell): fixed sidebar shell with theme switch and live listener
+  - feat(app): authentication seam, data layer and /login
+  - feat(ui): style the primitives in the Lyra language
+  - feat(app): Lyra design tokens and JetBrains Mono
+  - docs: note that async handler changes need a worker restart
+  - test(incident): cover the engine, notifier, recorder and command
+  - feat(console): prove the mail path with app:mail:test
+  - feat(mail): incident alert templates and a default sender
+  - feat(check): open or close the incident when recording a result
+  - feat(incident): notify subscribers of a transition by mail
+  - feat(incident): open and close incidents from a check outcome
+  - feat(incident): query a monitor open incident
+  - docs: note the Mercure hub speaks RFC 9068
+  - fix(mercure): publish RFC 9068 tokens and never let a hub failure escape
+  - test(check): cover the check pipeline end to end
+  - feat(monitor): dispatch the first check when a monitor is created
+  - feat(scheduler): tick the due checks every fifteen seconds
+  - feat(check): publish a refresh signal to Mercure after a check commits
+  - feat(check): record a check and its denormalised state in one transaction
+  - feat(check): add the check strategy, its outcome and the HTTP check
+  - feat(check): add the check messages, the due query and the dispatch handler
+  - feat(mercure): install and configure the Mercure hub bundle
+  - refactor(monitor): expose the monitor as a DTO over the entity
+  - test(monitor): cover the monitor CRUD surface over JSON:API
+  - feat(monitor): subscribe the creating operator on create
+  - feat(monitor): validate monitor writes at the application level
+  - feat(monitor): add a state class per monitor operation
+  - feat(monitor): expose full monitor operation set over JSON:API
+  - test(auth): add factories and functional tests
+  - feat(auth): add JWT authentication
+  - feat(user): add app:user:create console command
+  - feat(schema): add entity repositories and the migration
+  - feat(schema): add domain enums and entities
+  - Initial commit
+
