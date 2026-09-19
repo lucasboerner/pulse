@@ -7,12 +7,13 @@ x-api-env: &api-env
   MAILER_DSN: smtp://mailpit:1025
   MAILER_FROM: "Pulse <no-reply@localhost>"
   APP_FRONTEND_URL: http://app.pulse.orb.local
-  # Mercure hub — api/worker publish server-side to MERCURE_URL (internal name),
-  # the browser subscribes to MERCURE_PUBLIC_URL. MERCURE_JWT_SECRET signs the
-  # tokens and must match the hub's publisher/subscriber keys (mercure service
-  # below). Fixed committed dev value, like APP_SECRET in api/.env.dev — not a
-  # real secret, and stable so tokens survive container restarts. The publishing
-  # code and subscriber cookie arrive in later phases.
+  # Mercure hub — api/worker publish server-side to MERCURE_URL (internal name) and
+  # advertise MERCURE_PUBLIC_URL in the discovery Link header. The browser never hits
+  # the hub directly: it subscribes same-origin via the app's /mercure proxy (see the
+  # app service). MERCURE_JWT_SECRET signs the tokens and must match the hub's
+  # publisher/subscriber keys (mercure service below). Fixed committed dev value, like
+  # APP_SECRET in api/.env.dev — not a real secret, and stable so tokens survive
+  # container restarts.
   MERCURE_URL: http://mercure/.well-known/mercure
   MERCURE_PUBLIC_URL: http://mercure.pulse.orb.local/.well-known/mercure
   MERCURE_JWT_SECRET: "!ChangeThisMercureHubJWTSecretKey!"
@@ -103,10 +104,12 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=development
-      # Where the browser subscribes for live updates.
-      - MERCURE_PUBLIC_URL=http://mercure.pulse.orb.local/.well-known/mercure
-      # Signs the httpOnly subscriber token the app mints for the browser's
-      # EventSource; must match the hub's keys (mercure service below).
+      # The internal hub address the /mercure route proxies the browser's
+      # EventSource to — same-origin for the browser, so no CORS, no mixed content
+      # and no cross-subdomain cookie. The browser never reaches the hub directly.
+      - MERCURE_URL=http://mercure/.well-known/mercure
+      # Signs the subscribe-only capability token the proxy attaches server-side;
+      # must match the hub's keys (mercure service below).
       - MERCURE_JWT_SECRET=!ChangeThisMercureHubJWTSecretKey!
     volumes:
       - ./app:/app
@@ -129,9 +132,12 @@ services:
       # Fixed committed dev keys — must equal MERCURE_JWT_SECRET in x-api-env.
       MERCURE_PUBLISHER_JWT_KEY: "!ChangeThisMercureHubJWTSecretKey!"
       MERCURE_SUBSCRIBER_JWT_KEY: "!ChangeThisMercureHubJWTSecretKey!"
-      # Let the dev browser origins subscribe (phase 5).
+      # Let the dev browser origins subscribe. https is the OrbStack-canonical
+      # origin the browser uses (the cross-subdomain subscriber cookie is
+      # SameSite=None; Secure, so the stream needs https); http is kept for
+      # same-origin/localhost access.
       MERCURE_EXTRA_DIRECTIVES: |
-        cors_origins http://app.pulse.orb.local http://localhost:3000
+        cors_origins https://app.pulse.orb.local http://app.pulse.orb.local https://localhost:3000 http://localhost:3000
     labels:
       - "dev.orbstack.domains=mercure.pulse.orb.local"
     ports:

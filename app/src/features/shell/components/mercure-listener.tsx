@@ -1,46 +1,49 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 
-interface MercureListenerProps {
-  url: string;
-  topic: string;
-}
+import { useApplyMonitorUpdate } from "@/features/monitor/live/monitor-live-context";
 
 /**
- * Subscribes to the Mercure hub and re-reads the page when a message arrives.
- * The message is a signal, never the data — router.refresh() re-runs the Server
- * Component read. A burst of check results is debounced into one refresh, and a
- * dead hub simply stops updates: no overlay, no toast, no retry storm.
+ * Subscribes to live monitor updates with a native EventSource and patches each
+ * pushed check result into the live store, which flips the matching row in place.
+ *
+ * The stream is a same-origin route (/mercure) that proxies the Mercure hub: the
+ * browser speaks only to the Next server, so there is no cross-origin request, no
+ * mixed-content block over https and no cross-subdomain cookie — and EventSource,
+ * which cannot send an Authorization header, needs none. The proxy attaches the
+ * subscribe-only capability token server-side. EventSource reconnects on its own,
+ * so a dropped stream or a briefly dead hub just recovers with no code here.
  */
-export function MercureListener({ url, topic }: MercureListenerProps) {
-  const router = useRouter();
+export function MercureListener() {
+  const apply = useApplyMonitorUpdate();
 
   useEffect(() => {
-    const endpoint = `${url}?topic=${encodeURIComponent(topic)}`;
-    let source: EventSource | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    const source = new EventSource("/mercure");
 
-    try {
-      source = new EventSource(endpoint, { withCredentials: true });
-    } catch {
-      return;
-    }
-
-    source.onmessage = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => router.refresh(), 400);
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as {
+          id?: unknown;
+          status?: unknown;
+          checkedAt?: unknown;
+        };
+        if (typeof payload.id !== "string") return;
+        apply({
+          id: payload.id,
+          status:
+            payload.status === "up" || payload.status === "down" || payload.status === "degraded"
+              ? payload.status
+              : null,
+          checkedAt: typeof payload.checkedAt === "string" ? payload.checkedAt : null,
+        });
+      } catch {
+        // A frame we cannot parse is ignored; the next check result recovers it.
+      }
     };
-    // A hub that is down or rejects the token just stops the live stream; a
-    // manual reload still works, so nothing is surfaced to the operator.
-    source.onerror = () => {};
 
-    return () => {
-      if (timer) clearTimeout(timer);
-      source?.close();
-    };
-  }, [url, topic, router]);
+    return () => source.close();
+  }, [apply]);
 
   return null;
 }
