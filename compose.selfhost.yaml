@@ -49,6 +49,16 @@ x-api-env: &api-env
   MERCURE_URL: http://mercure/.well-known/mercure
   MERCURE_PUBLIC_URL: ${APP_FRONTEND_URL}/.well-known/mercure
   MERCURE_JWT_SECRET: ${MERCURE_JWT_SECRET}
+  # JWT signing keys for the login API. All optional: the api container generates
+  # an RSA key pair on first boot (lexik:jwt:generate-keypair --skip-if-exists in
+  # the entrypoint) unless the files already exist. The default paths live on the
+  # api_data volume (XDG_DATA_HOME=/data), so the keys survive `docker compose
+  # down` and are regenerated only if the volume is wiped. Set the paths to mount
+  # your own keys instead. JWT_PASSPHRASE is empty by default — an unencrypted
+  # private key on a volume only the operator can read; set it to encrypt the key.
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-/data/jwt/private.pem}
+  JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-/data/jwt/public.pem}
+  JWT_PASSPHRASE: ${JWT_PASSPHRASE:-}
 
 services:
   api:
