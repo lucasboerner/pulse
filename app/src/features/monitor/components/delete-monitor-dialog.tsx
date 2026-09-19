@@ -17,11 +17,18 @@ interface DeleteMonitorDialogProps {
   monitor: Monitor;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Runs after a successful delete — e.g. the detail page redirects to /monitors. */
+  onDeleted?: () => void;
 }
 
 // The 420px confirm modal. The destructive action routes through here — never an
 // inline undo — and the copy states that the history is kept.
-export function DeleteMonitorDialog({ monitor, open, onOpenChange }: DeleteMonitorDialogProps) {
+export function DeleteMonitorDialog({
+  monitor,
+  open,
+  onOpenChange,
+  onDeleted,
+}: DeleteMonitorDialogProps) {
   const [pending, startTransition] = useTransition();
 
   function onConfirm() {
@@ -32,6 +39,10 @@ export function DeleteMonitorDialog({ monitor, open, onOpenChange }: DeleteMonit
         return;
       }
       toast(`${monitor.name} deleted. History kept.`);
+      if (onDeleted) {
+        onDeleted();
+        return;
+      }
       onOpenChange(false);
     });
   }

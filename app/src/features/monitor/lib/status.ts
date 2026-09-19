@@ -15,14 +15,16 @@ export type StatusBadgeVariant =
 interface StatusMeta {
   label: string;
   badge: StatusBadgeVariant;
+  /** The detail banner's headline sentence for this status. */
+  headline: string;
 }
 
 const META: Record<DisplayStatus, StatusMeta> = {
-  up: { label: "Up", badge: "success" },
-  degraded: { label: "Degraded", badge: "warning" },
-  down: { label: "Down", badge: "destructive" },
-  paused: { label: "Paused", badge: "default" },
-  pending: { label: "Pending", badge: "outline" },
+  up: { label: "Up", badge: "success", headline: "All checks passing" },
+  degraded: { label: "Degraded", badge: "warning", headline: "Degraded responses" },
+  down: { label: "Down", badge: "destructive", headline: "Not responding" },
+  paused: { label: "Paused", badge: "default", headline: "Checks paused" },
+  pending: { label: "Pending", badge: "outline", headline: "Waiting for the first check" },
 };
 
 /** The display status for a monitor: paused → pending → its last check status. */
@@ -34,6 +36,11 @@ export function displayStatus(monitor: Monitor): DisplayStatus {
 
 export function statusMeta(status: DisplayStatus): StatusMeta {
   return META[status];
+}
+
+/** The detail banner's headline sentence for a display status. */
+export function statusHeadline(status: DisplayStatus): string {
+  return META[status].headline;
 }
 
 /**
@@ -89,4 +96,40 @@ export function relativeTime(iso: string | null, now: number = Date.now()): stri
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+const MONTHS = [
+  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+] as const;
+
+/**
+ * An absolute UTC timestamp in the incident log's style — `14 SEP 04:24 UTC`.
+ * The incident history renders times in UTC to match the mock; relative times
+ * elsewhere keep `relativeTime`.
+ */
+export function formatUtcTimestamp(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = MONTHS[date.getUTCMonth()];
+  const hours = String(date.getUTCHours()).padStart(2, "0");
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${month} ${hours}:${minutes} UTC`;
+}
+
+/**
+ * A compact duration from a count of seconds — `45s`, `6m 12s`, `2h 5m`, `1d 3h`.
+ * Two units at most; the largest two that apply.
+ */
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
+  if (minutes < 60) return `${minutes}m ${total % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
 }

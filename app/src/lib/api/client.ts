@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { ApiResource } from "@/types/api";
 import { getToken } from "@/lib/auth";
 
@@ -107,6 +107,12 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     // straight redirect to /login would loop past the middleware gate, which
     // only judges the token structurally.
     redirect("/logout");
+  }
+
+  if (response.status === 404 && options.notFoundOn404) {
+    // The caller opted this read into rendering the nearest not-found.tsx: a
+    // missing or soft-deleted resource is a 404 page, not an error boundary.
+    notFound();
   }
 
   if (!response.ok) {

@@ -71,7 +71,7 @@ export async function createMonitorAction(
     attributes: toMonitorAttributes(parsed.data),
     relationships: toSubscribersRelationship(parsed.data.subscribers),
   });
-  if (result.data) revalidateMonitorViews();
+  if (result.data) revalidateMonitorViews(result.data.id);
   return result;
 }
 
@@ -89,7 +89,7 @@ export async function updateMonitorAction(
     attributes: toMonitorAttributes(parsed.data),
     relationships: toSubscribersRelationship(parsed.data.subscribers),
   });
-  if (result.data) revalidateMonitorViews();
+  if (result.data) revalidateMonitorViews(id);
   return result;
 }
 
@@ -104,7 +104,33 @@ export async function setMonitorEnabledAction(
     id: `/api/monitors/${id}`,
     attributes: { enabled },
   });
-  if (result.data) revalidateMonitorViews();
+  if (result.data) revalidateMonitorViews(id);
+  return result;
+}
+
+/**
+ * The detail page's subscribe/unsubscribe toggle for the signed-in operator. It
+ * PATCHes only the subscriber relationship — every other field is left untouched —
+ * adding or removing the operator against the monitor's current recipient set. The
+ * full recipient list is still edited in the Edit modal.
+ */
+export async function setMonitorSubscriptionAction(
+  id: string,
+  operatorId: string,
+  subscribed: boolean,
+  currentSubscriberIds: string[],
+): Promise<ActionResult<Monitor>> {
+  const next = subscribed
+    ? Array.from(new Set([...currentSubscriberIds, operatorId]))
+    : currentSubscriberIds.filter((entry) => entry !== operatorId);
+
+  const result = await mutateMonitor({
+    path: `/api/monitors/${id}`,
+    method: "PATCH",
+    id: `/api/monitors/${id}`,
+    relationships: toSubscribersRelationship(next),
+  });
+  if (result.data) revalidateMonitorViews(id);
   return result;
 }
 
@@ -127,7 +153,7 @@ export async function deleteMonitorAction(id: string): Promise<ActionResult<{ id
   if (response.status === 401) redirect("/logout");
   if (response.status !== 204 && !response.ok) return { error: GENERIC_FAILURE };
 
-  revalidateMonitorViews();
+  revalidateMonitorViews(id);
   return { data: { id } };
 }
 
@@ -186,9 +212,13 @@ async function mutateMonitor(args: MutateArgs): Promise<ActionResult<Monitor>> {
   return { data: flattenResource<Monitor>(doc.data as Parameters<typeof flattenResource>[0]) };
 }
 
-function revalidateMonitorViews(): void {
+// A monitor write can change the overview, the table and — for an existing
+// monitor — its detail page, so revalidate all three. Create has no detail page
+// in cache yet, but passing the fresh id is harmless.
+function revalidateMonitorViews(id?: string): void {
   revalidatePath("/");
   revalidatePath("/monitors");
+  if (id) revalidatePath(`/monitors/${id}`);
 }
 
 // Maps a JSON:API error document onto per-field messages. The pointer looks like
