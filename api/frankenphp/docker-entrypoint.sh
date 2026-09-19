@@ -2,32 +2,6 @@
 set -e
 
 if [ "$1" = 'frankenphp' ] || [ "$1" = 'php' ] || [ "$1" = 'bin/console' ]; then
-	###> dunglas/symfony-docker ###
-	# Install the project the first time PHP is started
-	# This block will remove itself after the installation
-	if [ "$(cat composer.json)" = '{}' ]; then
-		rm -Rf tmp/
-		composer create-project "symfony/skeleton $SYMFONY_VERSION" tmp --stability="$STABILITY" --prefer-dist --no-progress --no-interaction --no-install
-
-		cd tmp
-		cp -Rp . ..
-		cd -
-		rm -Rf tmp/
-
-		composer require "php:>=$PHP_VERSION"
-		composer config --json extra.symfony.docker 'true'
-
-		# Remove the project install block from this script and the compose.yaml
-		sed -i '/^\t###> dunglas\/symfony-docker ###/,/^\t###< dunglas\/symfony-docker ###/d' frankenphp/docker-entrypoint.sh
-		sed -i '/###> dunglas\/symfony-docker ###/,/###< dunglas\/symfony-docker ###/d' compose.yaml
-
-		if grep -q ^DATABASE_URL= .env; then
-			echo 'To finish the installation please press Ctrl+C to stop Docker Compose and run: docker compose up --build --wait'
-			sleep infinity
-		fi
-	fi
-	###< dunglas/symfony-docker ###
-
 	if [ -z "$(ls -A 'vendor/' 2>/dev/null)" ]; then
 		composer install --prefer-dist --no-progress --no-interaction
 	fi
@@ -35,6 +9,25 @@ if [ "$1" = 'frankenphp' ] || [ "$1" = 'php' ] || [ "$1" = 'bin/console' ]; then
 	# Display information about the current project
 	# Or about an error in project initialization
 	php bin/console -V
+
+	# JWT signing keys — generated on first boot, but ONLY in the container that
+	# owns them, for the same reason migrations are (see the migration block
+	# below). api, worker and scheduler all share this image and this entrypoint;
+	# letting every one of them generate would race them to write the same key
+	# files. --skip-if-exists makes it idempotent, so a restart never overwrites a
+	# working pair, and an operator who mounts their own keys keeps them. In
+	# compose.selfhost.yaml the keys default to a path on the persisted api_data
+	# volume (JWT_SECRET_KEY under /data), so they survive `docker compose down`;
+	# worker and scheduler set SKIP_MIGRATIONS=1 and wait for api to be healthy.
+	if [ "${SKIP_MIGRATIONS:-0}" = "1" ]; then
+		echo 'SKIP_MIGRATIONS=1 — leaving JWT key generation to the api container.'
+	else
+		# Create the key directory up front so the generate command (running as
+		# www-data in the prod image) can write into it. Dev keeps its own
+		# config/jwt/ path from .env; the default here matches the self-host volume.
+		mkdir -p "$(dirname "${JWT_SECRET_KEY:-/data/jwt/private.pem}")"
+		php bin/console lexik:jwt:generate-keypair --skip-if-exists
+	fi
 
 	if grep -q ^DATABASE_URL= .env; then
 		echo 'Waiting for database to be ready...'
