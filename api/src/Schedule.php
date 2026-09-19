@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App;
 
 use App\Message\DispatchDueChecks;
+use App\Message\RollUpChecks;
 use Symfony\Component\Scheduler\Attribute\AsSchedule;
 use Symfony\Component\Scheduler\RecurringMessage;
 use Symfony\Component\Scheduler\Schedule as SymfonySchedule;
@@ -32,6 +33,9 @@ class Schedule implements ScheduleProviderInterface
             ->processOnlyLastMissedRun(true) // ensure only last missed task is run
             ->add(
                 RecurringMessage::every('15 seconds', new DispatchDueChecks()),
+                // Hourly rollup and retention. Routed to async (see messenger.yaml) so the
+                // worker drains it and this consumer keeps ticking DispatchDueChecks.
+                RecurringMessage::every('1 hour', new RollUpChecks()),
             )
         ;
     }

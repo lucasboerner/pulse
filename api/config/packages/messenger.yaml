@@ -18,6 +18,10 @@ framework:
             # Alert mail off the check loop: an SMTP outage delays notifications
             # without blocking the worker that drains RunCheck.
             App\Message\NotifyIncident: async
+            # Rollup + retention on the worker, unlike DispatchDueChecks: aggregating
+            # and deleting tens of thousands of rows must not stall the scheduler
+            # consumer's 15-second check tick.
+            App\Message\RollUpChecks: async
 
 when@test:
     framework:
