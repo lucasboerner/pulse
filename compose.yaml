@@ -115,6 +115,23 @@ services:
       - ./app:/app
       - /app/node_modules
       - /app/.next
+    # Unlike api/database, the dev server has no built-in probe, so `docker compose up
+    # --wait` would report the stack ready while Next.js is still starting. This gives
+    # `--wait` (and the e2e CI job) something to wait on. /login is public and returns
+    # 200; the node image has a global fetch, so no extra tooling is needed. The long
+    # start period covers `next dev`'s first-request route compile.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
     labels:
       - "dev.orbstack.domains=app.pulse.orb.local"
     ports:

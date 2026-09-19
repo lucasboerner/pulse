@@ -78,3 +78,73 @@ jobs:
 
       - name: Build
         run: yarn build
+
+  e2e:
+    name: End-to-end (Playwright)
+    # Pull requests only: the browser walk boots the whole stack and is far slower than
+    # the quality gates, so it should not sit in front of every push to main.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: app/yarn.lock
+
+      - name: Install app dependencies
+        working-directory: app
+        run: yarn install --frozen-lockfile
+
+      # Chromium only — three engines would triple the runtime to catch bugs this
+      # desktop-first, single-browser project will not have.
+      - name: Install Playwright Chromium
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+
+      # Cache the compose image layers in the GitHub Actions cache. A cold build of the
+      # FrankenPHP and Node images is several minutes; this pays it once and reuses the
+      # layers on later runs. bake reads the build definitions straight from compose.yaml.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build stack images (layer-cached)
+        uses: docker/bake-action@v6
+        with:
+          files: compose.yaml
+          load: true
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
+
+      # Boot the whole stack. --wait blocks on healthchecks; the app service carries one
+      # (added to compose.yaml), so this waits for the Next.js dev server too — not just
+      # api and database, which would otherwise report the stack ready too early.
+      - name: Start the stack
+        run: docker compose up -d --wait
+
+      - name: Run the end-to-end suite
+        working-directory: app
+        env:
+          CI: 'true'
+          E2E_BASE_URL: http://localhost:3000
+          E2E_API_URL: http://localhost:8080
+        run: yarn e2e
+
+      # Ordered so a boot failure surfaces logs rather than a bare timeout: the report and
+      # the compose logs both upload on any failure of the steps above.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: app/playwright-report
+          retention-days: 7
+
+      - name: Dump stack logs
+        if: failure()
+        run: docker compose logs --no-color --tail=300
