@@ -6,11 +6,12 @@
 #   docker compose -f compose.selfhost.yaml up -d
 #
 # The self-hoster runs their own reverse proxy (TLS termination) in front of the
-# published host ports — the project does not ship one.
+# frontend — the project does not ship one. On a host that already runs Traefik,
+# `install.sh` sets the whole thing up and `compose.traefik.yaml` adds the router.
 #
-# Set these environment variables first — put them in a `.env` file next to this
-# one, or in the shell environment. None have secret defaults; the operator must
-# supply them. See .env.example for what each one is.
+# `install.sh` generates these and writes the `.env` next to this file; the
+# Configuration table in README.md documents every one. Setting them by hand in
+# `.env` or in the shell environment works too — none have secret defaults.
 #
 #   APP_SECRET
 #   POSTGRES_DB  POSTGRES_USER  POSTGRES_PASSWORD
@@ -21,7 +22,7 @@
 # Optional overrides (sensible defaults shown): APP_PORT (3000), API_PORT (8080),
 # MERCURE_PORT (3001), IMAGE_TAG (latest), PULSE_RAW_RETENTION_DAYS (7),
 # POSTGRES_VERSION (16), POSTGRES_CHARSET (utf8). The JWT_* trio is optional too:
-# the api container generates a key pair on first boot (see .env.example).
+# the api container generates a key pair on first boot (see README.md).
 
 x-api-env: &api-env
   APP_ENV: prod

@@ -1,0 +1,43 @@
+# Pulse — overlay for a VPS that already runs Traefik.
+#
+#   docker compose -f compose.selfhost.yaml -f compose.traefik.yaml up -d
+#
+# Joins the frontend to your existing Traefik network and labels it with one
+# router. Traefik itself is not defined here — it stays where it is, with its
+# own entrypoints and certificate resolver.
+#
+# Only the frontend is routed: the browser never calls the API, and live updates
+# stream same-origin through the frontend's own /mercure route, so neither the
+# API nor the Mercure hub needs a router of its own.
+#
+# `install.sh` writes every variable below into `.env`. Set by hand:
+#
+#   PULSE_HOST            public hostname, e.g. pulse.example.com
+#   TRAEFIK_NETWORK       the external docker network Traefik reads (traefik)
+#   TRAEFIK_ENTRYPOINT    the https entrypoint's name (websecure)
+#   TRAEFIK_CERTRESOLVER  the ACME resolver's name (letsencrypt)
+#
+# Using a wildcard/static certificate instead of ACME? Drop the
+# `tls.certresolver` label and leave `tls` on its own.
+
+services:
+  app:
+    networks:
+      # Both: `default` reaches the API and the hub, `traefik` reaches the proxy.
+      default: {}
+      traefik: {}
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      traefik.http.routers.pulse.rule: Host(`${PULSE_HOST}`)
+      traefik.http.routers.pulse.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.pulse.tls: "true"
+      traefik.http.routers.pulse.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.services.pulse.loadbalancer.server.port: "3000"
+      # No compress middleware on this router: /mercure is a long-lived
+      # text/event-stream and must not be buffered or transformed.
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}
