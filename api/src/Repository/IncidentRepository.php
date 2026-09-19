@@ -37,4 +37,22 @@ class IncidentRepository extends ServiceEntityRepository
             ->getQuery()
             ->getOneOrNullResult();
     }
+
+    /**
+     * How many incidents opened for this monitor at or after $since — the detail
+     * page's "incidents in the last 30 days" figure. Counts by startedAt so an
+     * incident that is still ongoing is included the moment it opens. Rides
+     * idx_incident_started.
+     */
+    public function countStartedSince(Monitor $monitor, \DateTimeImmutable $since): int
+    {
+        return (int) $this->createQueryBuilder('incident')
+            ->select('COUNT(incident.id)')
+            ->andWhere('incident.monitor = :monitor')
+            ->andWhere('incident.startedAt >= :since')
+            ->setParameter('monitor', $monitor)
+            ->setParameter('since', $since)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }
