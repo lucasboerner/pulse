@@ -60,7 +60,7 @@ export function RecentChecksTable({ checks, now }: RecentChecksTableProps) {
               </span>
 
               {hasResponse ? (
-                <span className={cn("text-[13px] tabular-nums", codeClass)}>
+                <span className={cn("font-mono text-[13px] tabular-nums", codeClass)}>
                   {check.httpStatusCode}
                 </span>
               ) : (
@@ -72,7 +72,7 @@ export function RecentChecksTable({ checks, now }: RecentChecksTableProps) {
                 </span>
               )}
 
-              <span className="text-right text-[13px] tabular-nums text-muted-foreground">
+              <span className="text-right font-mono text-[13px] tabular-nums text-muted-foreground">
                 {check.latencyMs == null ? "—" : `${check.latencyMs} ms`}
               </span>
             </div>

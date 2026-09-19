@@ -25,7 +25,7 @@ export function SidebarNav() {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex h-9 items-center gap-2.5 px-3 text-[13px] transition-colors duration-[120ms]",
+              "flex h-9 items-center gap-2.5 rounded-sm px-3 text-[13px] transition-colors duration-[120ms]",
               active
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",

@@ -69,10 +69,71 @@ export interface RecentCheck {
 }
 
 /**
+ * One day of a monitor's status strip. `status` is the worst status observed that
+ * day; null means no check landed that day (a short grey bar). Nulls INSIDE this
+ * array are preserved by JSON:API (only null *top-level* attributes are dropped).
+ */
+export interface DailyStatus {
+  day: string;
+  status: CheckStatus | null;
+}
+
+/**
+ * A monitor's aggregate rollup for the overview "All Systems" list (a nested
+ * object inside the metrics resource, so it is not flattened — its fields arrive
+ * exactly as sent). `avgLatencyMs` and `uptimeRatio30d` are null when the 30-day
+ * window holds no check with a latency; `lastStatus` null is the pending state.
+ */
+export interface MonitorRollup {
+  monitorId: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  lastStatus: CheckStatus | null;
+  avgLatencyMs: number | null;
+  uptimeRatio30d: number | null;
+  dailyStatus: DailyStatus[];
+}
+
+/**
+ * One entry in the overview's recent-incidents feed. `endedAt` null means the
+ * incident is still open; a null top-level attribute would flatten to undefined,
+ * but this rides inside an array so it stays null — still, compare with `== null`.
+ */
+export interface IncidentSummary {
+  monitorName: string;
+  severity: IncidentSeverity;
+  startedAt: string;
+  endedAt: string | null;
+  cause: string | null;
+}
+
+/**
+ * The overview's fleet-wide aggregate read (flattened from JSON:API): the four
+ * headline counts, aggregate 30-day uptime and average response, the open-incident
+ * count, a cross-monitor 24h response series, the per-monitor rollups for the
+ * "All Systems" list and the newest incidents. Aggregate latency/uptime are null
+ * when no check (or no check with a latency) falls in the window.
+ */
+export interface MetricsSummary extends ApiResource {
+  monitorsTotal: number;
+  monitorsUp: number;
+  monitorsPaused: number;
+  needingAttention: number;
+  uptimeRatio30d: number | null;
+  avgResponseMs: number | null;
+  openIncidents: number;
+  responseSeries: HistoryBucket[];
+  monitors: MonitorRollup[];
+  recentIncidents: IncidentSummary[];
+}
+
+/**
  * The detail page's aggregate read (flattened from JSON:API): the 24-hour window,
- * its counts and uptime, the median and p95 latency, the 48-bucket chart series,
- * the newest raw checks and the 30-day incident count. Latency and ratio fields are
- * null when the window holds no check (or no check with a latency).
+ * its counts and uptime, the 7-day and 30-day uptime ratios, the median and p95
+ * latency, the 48-bucket chart series, the 90-day daily status strip, the newest
+ * raw checks and the 30-day incident count. Latency and ratio fields are null when
+ * the window holds no check (or no check with a latency).
  */
 export interface MonitorHistory extends ApiResource {
   windowStart: string;
@@ -82,9 +143,13 @@ export interface MonitorHistory extends ApiResource {
   degradedCount: number;
   downCount: number;
   uptimeRatio: number | null;
+  uptimeRatio7d: number | null;
+  uptimeRatio30d: number | null;
   medianLatencyMs: number | null;
   p95LatencyMs: number | null;
   series: HistoryBucket[];
+  /** 90 entries, worst-status-wins per day; null status = no check that day. */
+  dailyStatus: DailyStatus[];
   recentChecks: RecentCheck[];
   incidentCount30d: number;
 }

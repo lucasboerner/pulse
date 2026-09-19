@@ -21,7 +21,9 @@ export function PageHeader({ title, subtitle, leading, updatedLabel, action }: P
       <div className="flex min-w-0 items-center gap-3">
         {leading}
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-[22px] leading-[1.1] font-semibold tracking-[-0.01em]">{title}</h1>
+          <h1 className="font-heading text-[22px] leading-[1.1] font-semibold tracking-[-0.01em]">
+            {title}
+          </h1>
           {subtitle ? <p className="text-[13px] text-muted-foreground">{subtitle}</p> : null}
         </div>
       </div>

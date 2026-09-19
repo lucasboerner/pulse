@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
-import type { CheckStatus, Monitor } from "@/features/monitor/types";
+import type { CheckStatus, Monitor, MonitorRollup } from "@/features/monitor/types";
 
 // A live status update pushed over Mercure: the monitor's identifier, its new last
 // status (null while a first check is still pending) and when it was checked. This
@@ -84,4 +84,23 @@ export function useLiveMonitors(monitors: Monitor[]): Monitor[] {
       return { ...monitor, lastStatus: override.status, lastCheckedAt: override.checkedAt };
     });
   }, [monitors, overrides]);
+}
+
+/**
+ * The overview-list flavour of useLiveMonitors: merges the pushed live status onto
+ * the fleet rollups by monitor id, so a check result flips the row's dot and badge
+ * in place. Only `lastStatus` is pushed — the aggregate numbers (uptime, response)
+ * stay authoritative from the server render. A rollup with no override, or an
+ * override that matches, is returned unchanged.
+ */
+export function useLiveRollups(rollups: MonitorRollup[]): MonitorRollup[] {
+  const overrides = useContext(OverridesContext);
+  return useMemo(() => {
+    if (overrides.size === 0) return rollups;
+    return rollups.map((rollup) => {
+      const override = overrides.get(rollup.monitorId);
+      if (!override || override.status === rollup.lastStatus) return rollup;
+      return { ...rollup, lastStatus: override.status };
+    });
+  }, [rollups, overrides]);
 }

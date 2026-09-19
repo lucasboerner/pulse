@@ -1,16 +1,23 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "@/app/globals.css";
 import { cn } from "@/lib/utils";
 import { Providers } from "@/components/providers";
 import React from "react";
 
-// JetBrains Mono is the whole identity — there is no separate sans. The variable
-// font (300–700) is exposed as a CSS variable so globals.css can map it onto
-// Tailwind's --font-sans token, making the entire tree monospaced by default.
-const mono = JetBrains_Mono({
+// The type system is split: Space Grotesk is the body/UI sans, JetBrains Mono
+// carries headings and numbers (tabular). Both variable fonts are exposed as CSS
+// variables so globals.css can map them onto Tailwind's font tokens — --font-sans
+// (body default) → Space Grotesk, --font-heading / --font-mono → JetBrains Mono.
+const sans = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-app-sans",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-app-mono",
   display: "swap",
 });
 
@@ -29,7 +36,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full", "antialiased", "font-sans", mono.variable)}
+      className={cn("h-full", "antialiased", "font-sans", sans.variable, mono.variable)}
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>

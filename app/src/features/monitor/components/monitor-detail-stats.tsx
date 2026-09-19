@@ -1,57 +1,29 @@
-import { cn } from "@/lib/utils";
+import { StatBlock } from "@/features/monitor/components/stat-block";
 import type { MonitorHistory } from "@/features/monitor/types";
-
-interface StatCellProps {
-  label: string;
-  value: string;
-  footnote: string;
-  emphasis?: boolean;
-}
-
-// One cell of the packed panel: an uppercase micro-label, the figure in tabular
-// numerals, and a muted footnote right-aligned beneath it. The emphasised cell
-// (uptime) is the heaviest element on the page — a positive number, never a
-// failure count.
-function StatCell({ label, value, footnote, emphasis }: StatCellProps) {
-  return (
-    <div className="flex flex-col gap-3 bg-card p-5">
-      <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground">{label}</span>
-      <span
-        className={cn(
-          "leading-none tabular-nums",
-          emphasis ? "text-[28px] font-bold" : "text-[22px] font-semibold",
-        )}
-      >
-        {value}
-      </span>
-      <span className="text-right text-[11px] text-muted-foreground">{footnote}</span>
-    </div>
-  );
-}
 
 interface MonitorDetailStatsProps {
   history: MonitorHistory;
 }
 
+// Nullable API ratios arrive absent (undefined) rather than null when the window
+// holds no check, so compare loosely to catch both.
+function uptimePercent(ratio: number | null | undefined): string {
+  return ratio == null ? "—" : `${(ratio * 100).toFixed(2)}%`;
+}
+
 // The detail page's four-cell stat row, packed edge to edge with a 1px grid gap
-// over the border colour. Uptime carries the visual weight.
+// over the border colour and clipped to the rounded corner. The three uptime
+// windows lead; the median response closes the row. Shares the StatBlock face with
+// the overview KPIs, with the window as the footnote.
 export function MonitorDetailStats({ history }: MonitorDetailStatsProps) {
-  // Nullable API attributes arrive absent (undefined) rather than null when the
-  // window holds no check, so compare loosely to catch both.
-  const uptime =
-    history.uptimeRatio == null ? "—" : `${(history.uptimeRatio * 100).toFixed(2)} %`;
-  const response = history.medianLatencyMs == null ? "—" : `${history.medianLatencyMs} ms`;
+  const response = history.medianLatencyMs == null ? "—" : `${history.medianLatencyMs}ms`;
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(136px,1fr))] gap-px border border-border bg-border">
-      <StatCell label="Uptime 24h" value={uptime} footnote="last 24 hours" emphasis />
-      <StatCell label="Response" value={response} footnote="median" />
-      <StatCell label="Checks 24h" value={String(history.checkCount)} footnote="results" />
-      <StatCell
-        label="Incidents 30d"
-        value={String(history.incidentCount30d)}
-        footnote="30 days"
-      />
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(136px,1fr))] gap-px overflow-hidden rounded-lg border border-border bg-border">
+      <StatBlock label="Uptime 24h" value={uptimePercent(history.uptimeRatio)} footRight="24 hours" />
+      <StatBlock label="Uptime 7d" value={uptimePercent(history.uptimeRatio7d)} footRight="7 days" />
+      <StatBlock label="Uptime 30d" value={uptimePercent(history.uptimeRatio30d)} footRight="30 days" />
+      <StatBlock label="Response" value={response} footRight="median" />
     </div>
   );
 }

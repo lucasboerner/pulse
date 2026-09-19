@@ -96,6 +96,44 @@ final class MonitorHistoryTest extends ApiTestCase
         $this->assertSame(48 * 1800, $windowEnd->getTimestamp() - $windowStart->getTimestamp());
     }
 
+    public function testHistoryReturnsTheDailyStripAndTheSevenAndThirtyDayUptime(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'operator']);
+        $monitor = MonitorFactory::createOne(['url' => 'https://strip.example.com']);
+        $now = new \DateTimeImmutable();
+
+        // Two checks today (inside 24h/7d/30d), then checks reaching further back so
+        // each uptime window and several strip days can be checked independently.
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 100, 'checkedAt' => $now->modify('-1 hour')]);
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Down, 'latencyMs' => null, 'httpStatusCode' => null, 'checkedAt' => $now->modify('-2 hours')]);
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 200, 'checkedAt' => $now->modify('-3 days')]);
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Down, 'latencyMs' => null, 'httpStatusCode' => null, 'checkedAt' => $now->modify('-10 days')]);
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 300, 'checkedAt' => $now->modify('-40 days')]);
+
+        $token = $this->login($client, 'operator');
+        $response = $client->request('GET', '/api/monitors/'.$monitor->getId().'/history', $this->readOptions($token));
+
+        $this->assertResponseStatusCodeSame(200);
+        $attributes = $response->toArray()['data']['attributes'];
+
+        // 7d window sees -1h,-2h,-3d: up 2, down 1 → 2/3.
+        $this->assertEqualsWithDelta(2 / 3, $attributes['uptimeRatio7d'], 0.0001);
+        // 30d window adds -10d (down): up 2, down 2 → 1/2. -40d is outside 30d.
+        $this->assertEqualsWithDelta(0.5, $attributes['uptimeRatio30d'], 0.0001);
+
+        // A 90-day strip, worst-status-wins per calendar day, null on empty days.
+        $strip = $attributes['dailyStatus'];
+        $this->assertCount(90, $strip);
+        $byDay = array_column($strip, 'status', 'day');
+        $today = new \DateTimeImmutable('today');
+        $day = static fn (int $ago): string => $today->modify("-{$ago} days")->format('Y-m-d');
+        $this->assertSame('up', $byDay[$day(3)]);
+        $this->assertSame('down', $byDay[$day(10)]);
+        $this->assertSame('up', $byDay[$day(40)]);
+        $this->assertNull($byDay[$day(5)], 'A day with no check carries a null status.');
+    }
+
     public function testRecentChecksAreTheTenNewestNewestFirst(): void
     {
         $client = static::createClient();
@@ -141,6 +179,10 @@ final class MonitorHistoryTest extends ApiTestCase
         $this->assertSame([], $attributes['recentChecks']);
         $this->assertCount(48, $attributes['series']);
         $this->assertNull($attributes['series'][0]['status']);
+        $this->assertNull($attributes['uptimeRatio7d']);
+        $this->assertNull($attributes['uptimeRatio30d']);
+        $this->assertCount(90, $attributes['dailyStatus']);
+        $this->assertNull($attributes['dailyStatus'][0]['status']);
     }
 
     public function testUnknownMonitorReturnsNotFound(): void

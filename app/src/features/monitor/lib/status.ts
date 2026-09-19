@@ -1,4 +1,4 @@
-import type { Monitor } from "@/features/monitor/types";
+import type { CheckStatus } from "@/features/monitor/types";
 
 // What a monitor reads as on screen. A paused monitor (enabled === false) and a
 // pending monitor (no check has landed, lastStatus === null) are display states
@@ -27,8 +27,15 @@ const META: Record<DisplayStatus, StatusMeta> = {
   pending: { label: "Pending", badge: "outline", headline: "Waiting for the first check" },
 };
 
-/** The display status for a monitor: paused → pending → its last check status. */
-export function displayStatus(monitor: Monitor): DisplayStatus {
+/**
+ * The display status for a monitor: paused → pending → its last check status.
+ * Takes just the two fields it reads, so it serves a full `Monitor` and a
+ * `MonitorRollup` (or any live-merged shape) alike.
+ */
+export function displayStatus(monitor: {
+  enabled: boolean;
+  lastStatus: CheckStatus | null;
+}): DisplayStatus {
   if (!monitor.enabled) return "paused";
   if (monitor.lastStatus == null) return "pending";
   return monitor.lastStatus;

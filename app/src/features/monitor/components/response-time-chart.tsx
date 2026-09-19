@@ -102,7 +102,7 @@ export function ResponseTimeChart({ series }: ResponseTimeChartProps) {
           />
         ))}
       </svg>
-      <div className="flex items-center justify-between text-[11px] tracking-[0.08em] uppercase text-muted-foreground">
+      <div className="flex items-center justify-between font-mono text-[11px] tracking-[0.08em] uppercase text-muted-foreground">
         <span>24H Ago</span>
         <span>Now</span>
       </div>

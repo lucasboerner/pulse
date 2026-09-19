@@ -96,7 +96,7 @@ export function MonitorsTable({ monitors, users, currentUserId, now }: MonitorsT
         </span>
       </div>
 
-      <div className="border border-border bg-card">
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="overflow-x-auto">
           <div className="min-w-[820px]">
             <div

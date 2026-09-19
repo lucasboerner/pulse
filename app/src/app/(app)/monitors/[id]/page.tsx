@@ -15,6 +15,8 @@ import { ResponseTimeChart } from "@/features/monitor/components/response-time-c
 import { RecentChecksTable } from "@/features/monitor/components/recent-checks-table";
 import { MonitorConfigurationCard } from "@/features/monitor/components/monitor-configuration-card";
 import { IncidentHistoryCard } from "@/features/monitor/components/incident-history-card";
+import { StatusHistoryCard } from "@/features/monitor/components/status-history-card";
+import { SloBudgetCard } from "@/features/monitor/components/slo-budget-card";
 
 interface MonitorDetailPageProps {
   params: Promise<{ id: string }>;
@@ -80,6 +82,8 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
 
         <div className="grid grid-cols-1 gap-5 min-[1100px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
           <div className="flex min-w-0 flex-col gap-5">
+            <StatusHistoryCard days={history.dailyStatus} />
+
             <Card>
               <CardHeader>
                 <CardTitle>Response Time</CardTitle>
@@ -107,6 +111,7 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
               users={users}
               currentUserId={currentUserId}
             />
+            <SloBudgetCard uptimeRatio30d={history.uptimeRatio30d} />
             <IncidentHistoryCard incidents={incidents} now={now} />
           </div>
         </div>
