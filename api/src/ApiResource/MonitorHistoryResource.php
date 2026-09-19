@@ -52,9 +52,17 @@ class MonitorHistoryResource
     #[Groups(['history:read'])]
     public int $downCount = 0;
 
-    /** The share of checks that passed, or null when the window holds none. */
+    /** The share of checks that passed over the 24-hour window, or null when it holds none. */
     #[Groups(['history:read'])]
     public ?float $uptimeRatio = null;
+
+    /** The share of checks that passed over the last 7 days, or null when none ran. */
+    #[Groups(['history:read'])]
+    public ?float $uptimeRatio7d = null;
+
+    /** The share of checks that passed over the last 30 days, or null when none ran. */
+    #[Groups(['history:read'])]
+    public ?float $uptimeRatio30d = null;
 
     #[Groups(['history:read'])]
     public ?int $medianLatencyMs = null;
@@ -82,4 +90,14 @@ class MonitorHistoryResource
 
     #[Groups(['history:read'])]
     public int $incidentCount30d = 0;
+
+    /**
+     * The 90-day status strip: one entry per calendar day, oldest first, carrying the
+     * worst status seen that day (down over degraded over up). A day with no check
+     * carries a null status.
+     *
+     * @var list<array{day: string, status: string|null}>
+     */
+    #[Groups(['history:read'])]
+    public array $dailyStatus = [];
 }

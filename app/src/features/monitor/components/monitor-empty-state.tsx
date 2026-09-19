@@ -10,7 +10,7 @@ interface MonitorEmptyStateProps {
 // modal. No illustration, no headline.
 export function MonitorEmptyState({ users, currentUserId }: MonitorEmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 border border-border bg-card px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-border bg-card px-6 py-12 text-center">
       <p className="text-[13px] text-muted-foreground">
         No monitors yet — add the first target to start checking.
       </p>

@@ -33,6 +33,10 @@ final readonly class MonitorHistoryProvider implements ProviderInterface
     private const int BUCKET_SECONDS = 1800;
     private const int RECENT_LIMIT = 10;
     private const int INCIDENT_WINDOW_DAYS = 30;
+    private const int DAILY_STRIP_DAYS = 90;
+    private const int DAY_SECONDS = 86400;
+    private const int UPTIME_7D = 7;
+    private const int UPTIME_30D = 30;
 
     public function __construct(
         private MonitorRepository $monitors,
@@ -120,7 +124,83 @@ final readonly class MonitorHistoryProvider implements ProviderInterface
         }
         $resource->series = $series;
 
+        // Longer-window uptime, folded from the fleet-wide GROUP BY COUNT for the
+        // single monitor this page is about.
+        $resource->uptimeRatio7d = $this->uptimeRatioFor(
+            $this->checkResults->uptimeCountsSince($windowEnd->sub(new \DateInterval('P'.self::UPTIME_7D.'D'))),
+            $resource->monitorId,
+        );
+        $resource->uptimeRatio30d = $this->uptimeRatioFor(
+            $this->checkResults->uptimeCountsSince($windowEnd->sub(new \DateInterval('P'.self::UPTIME_30D.'D'))),
+            $resource->monitorId,
+        );
+
+        // The 90-day daily strip, worst-status-wins per calendar day. Bucket
+        // boundaries align to local midnight so a "day" is a calendar day, not a
+        // rolling 24-hour window; the loop mirrors the half-hour bucketing above.
+        $resource->dailyStatus = $this->dailyStatus($monitor);
+
         return $resource;
+    }
+
+    /**
+     * Fold the fleet-wide status counts down to one monitor's uptime ratio, or null
+     * when it has no check in the window.
+     *
+     * @param list<array{monitorId: string, status: string, checkCount: int}> $rows
+     */
+    private function uptimeRatioFor(array $rows, string $monitorId): ?float
+    {
+        $up = 0;
+        $total = 0;
+        foreach ($rows as $row) {
+            if ($row['monitorId'] !== $monitorId) {
+                continue;
+            }
+
+            $total += $row['checkCount'];
+            if (CheckStatus::Up->value === $row['status']) {
+                $up += $row['checkCount'];
+            }
+        }
+
+        return $total > 0 ? $up / $total : null;
+    }
+
+    /**
+     * The 90 calendar-day status strip for a monitor, oldest first: each day carries
+     * the worst status seen (down over degraded over up), or null when no check ran.
+     *
+     * @return list<array{day: string, status: string|null}>
+     */
+    private function dailyStatus(Monitor $monitor): array
+    {
+        $windowStart = (new \DateTimeImmutable('today'))->sub(new \DateInterval('P'.(self::DAILY_STRIP_DAYS - 1).'D'));
+        $windowStartTs = $windowStart->getTimestamp();
+
+        /** @var list<int|null> $worstRank a null day has seen no check */
+        $worstRank = array_fill(0, self::DAILY_STRIP_DAYS, null);
+        foreach ($this->checkResults->statusRowsForSince($monitor, $windowStart) as $row) {
+            $index = intdiv($row['checkedAt']->getTimestamp() - $windowStartTs, self::DAY_SECONDS);
+            if ($index < 0 || $index >= self::DAILY_STRIP_DAYS) {
+                continue;
+            }
+
+            $rank = $this->statusRank($row['status']);
+            if (null === $worstRank[$index] || $rank > $worstRank[$index]) {
+                $worstRank[$index] = $rank;
+            }
+        }
+
+        $strip = [];
+        for ($index = 0; $index < self::DAILY_STRIP_DAYS; ++$index) {
+            $strip[] = [
+                'day' => $windowStart->add(new \DateInterval('P'.$index.'D'))->format('Y-m-d'),
+                'status' => $this->rankStatus($worstRank[$index]),
+            ];
+        }
+
+        return $strip;
     }
 
     /**

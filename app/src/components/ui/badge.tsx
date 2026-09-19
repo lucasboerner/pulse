@@ -8,7 +8,7 @@ import { Slot } from "radix-ui"
 // strength (`bg-current` on the dot); the border stays the standard hairline.
 // This is the only place hue is allowed to mean something.
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1.5 border border-border px-2 text-[11px] leading-none font-medium tracking-[0.06em] uppercase whitespace-nowrap transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-ring/40 [&>svg]:pointer-events-none [&>svg]:size-2.5",
+  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1.5 rounded-sm border border-border px-2 text-[11px] leading-none font-medium tracking-[0.06em] uppercase whitespace-nowrap transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-ring/40 [&>svg]:pointer-events-none [&>svg]:size-2.5",
   {
     variants: {
       variant: {

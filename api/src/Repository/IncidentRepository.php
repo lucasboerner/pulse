@@ -55,4 +55,42 @@ class IncidentRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /**
+     * How many incidents are open across the whole fleet right now — the overview's
+     * "open incidents" figure. An open incident is one with no end. The monitor is
+     * joined so the Gedmo soft-delete filter appends monitor.deleted_at IS NULL,
+     * keeping this count consistent with findRecent(): an incident whose monitor has
+     * been deleted is not shown in the feed, so it must not be counted here either.
+     * Rides idx_incident_monitor_open on (monitor_id, ended_at).
+     */
+    public function countOpen(): int
+    {
+        return (int) $this->createQueryBuilder('incident')
+            ->select('COUNT(incident.id)')
+            ->join('incident.monitor', 'monitor')
+            ->andWhere('incident.endedAt IS NULL')
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * The most recent incidents across every monitor, newest first, capped at
+     * $limit — the overview's incident feed. The monitor is eager-joined so the
+     * provider can read its name without a query per row; the join also excludes
+     * incidents whose monitor has been soft-deleted (the Gedmo filter appends
+     * monitor.deleted_at IS NULL). Rides idx_incident_started.
+     *
+     * @return list<Incident>
+     */
+    public function findRecent(int $limit): array
+    {
+        return $this->createQueryBuilder('incident')
+            ->addSelect('monitor')
+            ->join('incident.monitor', 'monitor')
+            ->orderBy('incident.startedAt', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
 }

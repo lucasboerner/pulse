@@ -78,11 +78,11 @@ export function MonitorRow({ monitor, users, currentUserId, now }: MonitorRowPro
           <MonitorStatusBadge status={status} />
         </div>
 
-        <span className="text-[13px] tabular-nums text-muted-foreground">
+        <span className="font-mono text-[13px] tabular-nums text-muted-foreground">
           every {intervalLabel(monitor.intervalSeconds)}
         </span>
 
-        <span className="text-[13px] tabular-nums text-muted-foreground">
+        <span className="font-mono text-[13px] tabular-nums text-muted-foreground">
           {relativeTime(monitor.lastCheckedAt, now)}
         </span>
 

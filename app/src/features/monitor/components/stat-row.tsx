@@ -1,54 +1,37 @@
-import { cn } from "@/lib/utils";
-import type { Monitor } from "@/features/monitor/types";
-
-interface StatBlockProps {
-  label: string;
-  value: number;
-  emphasis?: boolean;
-  dotClass?: string;
-}
-
-// The heaviest number on the screen is a positive one (Systems Up). A failure
-// count is the same weight as the others and never grows into an alarm — its
-// only colour is the small dot beside its label.
-function StatBlock({ label, value, emphasis, dotClass }: StatBlockProps) {
-  return (
-    <div className="flex flex-col gap-3 bg-card p-5">
-      <span className="inline-flex items-center gap-2 text-[11px] tracking-[0.08em] uppercase text-muted-foreground">
-        {dotClass ? <span aria-hidden className={cn("size-1.5 rounded-full", dotClass)} /> : null}
-        {label}
-      </span>
-      <span
-        className={cn(
-          "leading-none tabular-nums",
-          emphasis ? "text-[28px] font-bold" : "text-[22px] font-semibold",
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
+import { StatBlock } from "@/features/monitor/components/stat-block";
+import type { MetricsSummary } from "@/features/monitor/types";
 
 interface StatRowProps {
-  monitors: Monitor[];
+  metrics: MetricsSummary;
 }
 
 // Packed edge to edge: a 1px grid gap over the border colour, so the hairline is
-// the gutter and the block reads as one ruled instrument panel.
-export function StatRow({ monitors }: StatRowProps) {
-  const total = monitors.length;
-  const paused = monitors.filter((monitor) => !monitor.enabled).length;
-  const active = monitors.filter((monitor) => monitor.enabled);
-  const up = active.filter((monitor) => monitor.lastStatus === "up").length;
-  const down = active.filter((monitor) => monitor.lastStatus === "down").length;
+// the gutter and the block reads as one ruled instrument panel, clipped to the
+// rounded corner. The four fleet aggregates come straight from the metrics read.
+export function StatRow({ metrics }: StatRowProps) {
+  // Nullable aggregates arrive absent (undefined) rather than null when no check
+  // falls in the window, so compare loosely to catch both.
+  const uptime =
+    metrics.uptimeRatio30d == null ? "—" : `${(metrics.uptimeRatio30d * 100).toFixed(2)}%`;
+  const avgResponse = metrics.avgResponseMs == null ? "—" : `${metrics.avgResponseMs}ms`;
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(136px,1fr))] gap-px border border-border bg-border">
-      <StatBlock label="Monitors" value={total} />
-      <StatBlock label="Up" value={up} emphasis dotClass="bg-success" />
-      <StatBlock label="Down" value={down} dotClass="bg-destructive" />
-      <StatBlock label="Paused" value={paused} dotClass="bg-muted-foreground" />
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(136px,1fr))] gap-px overflow-hidden rounded-lg border border-border bg-border">
+      <StatBlock
+        label="Systems Up"
+        value={`${metrics.monitorsUp}/${metrics.monitorsTotal}`}
+        footLeft="online"
+        footRight={`${metrics.monitorsPaused} paused`}
+      />
+      <StatBlock label="Uptime 30d" value={uptime} footLeft="30-day" footRight="SLO 99.90%" />
+      <StatBlock label="Avg Response" value={avgResponse} footLeft="mean" footRight="last 24h" />
+      <StatBlock
+        label="Open Incidents"
+        value={String(metrics.openIncidents)}
+        tone={metrics.openIncidents > 0 ? "destructive" : "success"}
+        footLeft="unresolved"
+        footRight={`${metrics.needingAttention} affected`}
+      />
     </div>
   );
 }

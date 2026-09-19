@@ -15,9 +15,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           // Lyra toast: card fill, hairline border with a 2px teal left edge,
-          // sharp corners, 13px single line. Confirms facts, never celebrates.
+          // gently rounded, 13px single line. Confirms facts, never celebrates.
           toast:
-            "!rounded-none !border !border-border !border-l-2 !border-l-primary !bg-card !text-[13px] !text-foreground",
+            "!rounded-md !border !border-border !border-l-2 !border-l-primary !bg-card !text-[13px] !text-foreground",
         },
       }}
       style={
