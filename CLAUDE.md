@@ -110,6 +110,7 @@ pulse/
 ## Important Notes
 
 - **Environment Parity**: always use `docker compose exec` for commands
+- **Adding an `app/` npm dependency needs an in-container install too**: the `app` container's `node_modules` is an anonymous volume, so after `yarn add` on the host run `docker compose exec app yarn install` — otherwise the pre-commit hook's in-container `tsc` cannot resolve the new package.
 - **Code Standards**: PSR-12 for PHP (PHP CS Fixer `@Symfony`), ESLint for TypeScript
 - **API Content-Type**: `application/vnd.api+json` — JSON-LD/Hydra is **disabled**;
   only `json` + `jsonapi` formats are enabled in `api/config/packages/api_platform.yaml`.
