@@ -157,9 +157,12 @@ final class MonitorHistoryTest extends ApiTestCase
         }
 
         // Raw rows only for the last couple of hours — the tail past the newest rollup.
-        $now = new \DateTimeImmutable();
-        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 110, 'checkedAt' => $now->modify('-1 hour')]);
-        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 130, 'checkedAt' => $now->modify('-2 hours')]);
+        // Clamped to midnight so the tail always lands on today's strip cell: run before
+        // 02:00 UTC, "two hours ago" is yesterday and the last assertion below sees null.
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $tail = static fn (int $hoursAgo): \DateTimeImmutable => max($today, $now->modify("-{$hoursAgo} hours"));
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 110, 'checkedAt' => $tail(1)]);
+        CheckResultFactory::createOne(['monitor' => $monitor, 'status' => CheckStatus::Up, 'latencyMs' => 130, 'checkedAt' => $tail(2)]);
 
         $token = $this->login($client, 'operator');
         $response = $client->request('GET', '/api/monitors/'.$monitor->getId().'/history', $this->readOptions($token));
