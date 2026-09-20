@@ -22,9 +22,9 @@ export default async function OverviewPage() {
       <PageHeader
         title="Overview"
         subtitle="Every monitor, at a glance."
-        action={<NewMonitorButton users={users} currentUserId={currentUserId} />}
+        action={<NewMonitorButton users={users} currentUserId={currentUserId} compact />}
       />
-      <div className="flex flex-col gap-5 p-6">
+      <div className="flex flex-col gap-4 p-4 sm:gap-5 sm:p-6">
         {metrics.monitorsTotal === 0 ? (
           <MonitorEmptyState users={users} currentUserId={currentUserId} />
         ) : (

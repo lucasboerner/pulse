@@ -68,7 +68,7 @@ export function MonitorsTable({ monitors, users, currentUserId, now }: MonitorsT
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-[280px] max-w-full">
+        <div className="relative w-full sm:w-[280px]">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -77,7 +77,7 @@ export function MonitorsTable({ monitors, users, currentUserId, now }: MonitorsT
             className="pl-8"
           />
         </div>
-        <div className="w-[170px]">
+        <div className="w-[150px] sm:w-[170px]">
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger>
               <SelectValue />
@@ -98,16 +98,18 @@ export function MonitorsTable({ monitors, users, currentUserId, now }: MonitorsT
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="overflow-x-auto">
-          <div className="min-w-[820px]">
+          <div className="md:min-w-[820px]">
+            {/* The header belongs to the table shape only — below md the rows are
+                cards and label themselves. */}
             <div
               className={cn(
-                "grid h-[38px] items-center gap-3 border-b border-border bg-sidebar px-4 text-[11px] tracking-[0.08em] uppercase text-muted-foreground",
+                "hidden h-[38px] items-center gap-3 border-b border-border bg-sidebar px-4 text-[11px] tracking-[0.08em] uppercase text-muted-foreground md:grid",
                 MONITOR_TABLE_GRID,
               )}
             >
               <span>Monitor</span>
-              <span>Type</span>
               <span>Status</span>
+              <span>Type</span>
               <span>Interval</span>
               <span>Last Checked</span>
               <span className="text-right">Actions</span>

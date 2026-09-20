@@ -8,7 +8,7 @@ interface RecentChecksTableProps {
   now: number;
 }
 
-const GRID = "grid-cols-[minmax(96px,1fr)_100px_minmax(90px,1.4fr)_90px]";
+const GRID = "grid-cols-[minmax(84px,1fr)_100px_minmax(80px,1.4fr)_84px]";
 
 // The latest probe results as a dense table: an uppercase header row on the muted
 // surface, a hairline under each row, numbers right-aligned and tabular. The HTTP
@@ -16,15 +16,15 @@ const GRID = "grid-cols-[minmax(96px,1fr)_100px_minmax(90px,1.4fr)_90px]";
 // in place of the code and a dash for the latency.
 export function RecentChecksTable({ checks, now }: RecentChecksTableProps) {
   if (checks.length === 0) {
-    return <p className="py-6 text-[13px] text-muted-foreground">No checks recorded yet.</p>;
+    return <p className="px-4 py-6 text-[13px] text-muted-foreground sm:px-5">No checks recorded yet.</p>;
   }
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[440px]">
+      <div className="min-w-[400px]">
         <div
           className={cn(
-            "grid h-[38px] items-center gap-3 bg-muted px-5 text-[11px] tracking-[0.08em] uppercase text-muted-foreground",
+            "grid h-[38px] items-center gap-3 bg-muted px-4 text-[11px] tracking-[0.08em] uppercase text-muted-foreground sm:px-5",
             GRID,
           )}
         >
@@ -47,7 +47,7 @@ export function RecentChecksTable({ checks, now }: RecentChecksTableProps) {
             <div
               key={`${check.checkedAt}-${index}`}
               className={cn(
-                "grid items-center gap-3 border-b border-border px-5 py-2.75 last:border-b-0",
+                "grid items-center gap-3 border-b border-border px-4 py-2.75 last:border-b-0 sm:px-5",
                 GRID,
               )}
             >

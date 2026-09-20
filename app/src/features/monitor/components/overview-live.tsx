@@ -21,9 +21,9 @@ export function OverviewLive({ metrics }: OverviewLiveProps) {
   return (
     <>
       <StatRow metrics={metrics} />
-      <div className="grid grid-cols-1 gap-5 min-[1100px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 min-[1100px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <MonitorList monitors={monitors} />
-        <div className="flex min-w-0 flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
           <OverviewResponseCard avgResponseMs={metrics.avgResponseMs} series={metrics.responseSeries} />
           <OverviewIncidentsCard incidents={metrics.recentIncidents} />
         </div>

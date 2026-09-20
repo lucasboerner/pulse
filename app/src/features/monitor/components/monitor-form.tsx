@@ -88,8 +88,8 @@ export function MonitorForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="flex flex-col gap-4 p-5">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
           {errors.root ? (
             <p className="text-[12px] leading-normal text-destructive">{errors.root.message}</p>
           ) : null}
@@ -123,7 +123,7 @@ export function MonitorForm({
             )}
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="checkType"
@@ -220,7 +220,7 @@ export function MonitorForm({
           />
         </div>
 
-        <div className="flex items-center justify-end gap-2.5 border-t border-border bg-muted px-5 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-border bg-muted px-5 py-4">
           <Button type="button" variant="outline" size="sm" onClick={onCancel}>
             Cancel
           </Button>

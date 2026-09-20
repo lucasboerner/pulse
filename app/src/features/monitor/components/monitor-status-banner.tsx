@@ -56,7 +56,7 @@ export function MonitorStatusBanner({
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4 rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4 rounded-lg border border-border bg-card p-4 sm:p-5">
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <StatusDot status={status} />
@@ -69,7 +69,7 @@ export function MonitorStatusBanner({
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">
           <Button variant="outline" size="sm" onClick={onTogglePause}>
             {enabled ? <PauseIcon /> : <PlayIcon />}
             {enabled ? "Pause" : "Resume"}

@@ -55,17 +55,17 @@ export function MonitorSubscribersRow({
   }
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div className="flex flex-col items-start gap-1.5 sm:items-end">
       {emails.length > 0 ? (
-        <span className="text-right text-[13px] break-all">{emails.join(", ")}</span>
+        <span className="text-[13px] break-all sm:text-right">{emails.join(", ")}</span>
       ) : (
-        <span className="text-right text-[13px] font-normal text-destructive">
+        <span className="text-[13px] font-normal text-destructive sm:text-right">
           No recipients — this monitor mails nobody.
         </span>
       )}
 
       {currentUserId !== null ? (
-        <Button variant="ghost" size="xs" onClick={onToggle} disabled={pending}>
+        <Button variant="ghost" size="xs" className="-ml-2.5 sm:ml-0" onClick={onToggle} disabled={pending}>
           {subscribed ? "Unsubscribe me" : "Subscribe me"}
         </Button>
       ) : null}

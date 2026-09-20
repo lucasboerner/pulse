@@ -20,7 +20,9 @@ interface MonitorFormDialogProps {
 }
 
 // The 540px New / Edit modal — three banded regions split by hairlines. It holds
-// only local state, so the Dialog/Sheet router-hook caveat does not apply.
+// only local state, so the Dialog/Sheet router-hook caveat does not apply. The
+// modal is capped to the viewport and the field region scrolls inside it, so on a
+// phone the footer buttons stay reachable however long the form runs.
 export function MonitorFormDialog({
   mode,
   monitor,
@@ -33,7 +35,7 @@ export function MonitorFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="w-full gap-0 border border-border bg-card p-0 shadow-lg sm:max-w-[540px]"
+        className="grid max-h-[calc(100svh-2rem)] w-full grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden border border-border bg-card p-0 shadow-lg sm:max-w-[540px]"
       >
         <DialogHeader className="flex flex-col gap-1 border-b border-border p-5">
           <DialogTitle className="text-[18px] font-semibold">

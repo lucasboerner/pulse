@@ -5,10 +5,12 @@ import { LogoutButton } from "@/features/shell/components/logout-button";
 
 // The inset 212px sidebar: it sits directly on the shell background (no panel of
 // its own — the main column is the floating card) with wordmark over the eyebrow,
-// navigation, and the theme switch + sign-out pinned to its bottom edge.
+// navigation, and the theme switch + sign-out pinned to its bottom edge. Below md
+// there is no room for a rail, so it is hidden and MobileNav carries the same
+// controls across the top instead.
 export function Sidebar() {
   return (
-    <nav className="flex w-53 shrink-0 flex-col py-5">
+    <nav className="hidden w-53 shrink-0 flex-col py-5 md:flex">
       <div className="px-5 pb-5.5">
         <Wordmark />
       </div>

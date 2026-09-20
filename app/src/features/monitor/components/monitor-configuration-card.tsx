@@ -14,11 +14,11 @@ interface ConfigRowProps {
 // right-aligned, a hairline beneath every row but the last.
 function ConfigRow({ label, children }: ConfigRowProps) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-border py-2.75 last:border-b-0">
-      <span className="shrink-0 pt-0.5 text-[11px] tracking-[0.08em] uppercase text-muted-foreground">
+    <div className="flex flex-col gap-1 border-b border-border py-2.75 last:border-b-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <span className="shrink-0 text-[11px] tracking-[0.08em] uppercase text-muted-foreground sm:pt-0.5">
         {label}
       </span>
-      <div className="min-w-0 text-right text-[13px]">{children}</div>
+      <div className="min-w-0 text-[13px] sm:text-right">{children}</div>
     </div>
   );
 }

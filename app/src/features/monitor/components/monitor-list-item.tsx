@@ -25,7 +25,7 @@ export function MonitorListItem({ monitor }: MonitorListItemProps) {
     <Link
       href={`/monitors/${monitor.monitorId}`}
       className={cn(
-        "flex flex-col gap-2.5 border-b border-border px-5 py-3.5 transition-colors duration-[120ms] last:border-b-0 hover:bg-accent",
+        "flex flex-col gap-2.5 border-b border-border px-4 py-3.5 transition-colors duration-[120ms] last:border-b-0 hover:bg-accent sm:px-5",
         status === "paused" && "opacity-40",
       )}
     >

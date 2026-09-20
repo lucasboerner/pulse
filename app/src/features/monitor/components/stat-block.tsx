@@ -14,13 +14,13 @@ interface StatBlockProps {
 // with tabular figures so a live swap never jitters.
 export function StatBlock({ label, value, footLeft, footRight, tone }: StatBlockProps) {
   return (
-    <div className="flex flex-col gap-2.5 bg-card p-5 font-mono">
+    <div className="flex flex-col gap-2.5 bg-card p-4 font-mono sm:p-5">
       <span className="text-[11px] font-medium tracking-[0.08em] uppercase text-muted-foreground">
         {label}
       </span>
       <span
         className={cn(
-          "text-[26px] font-bold leading-none tabular-nums",
+          "text-[22px] font-bold leading-none tabular-nums sm:text-[26px]",
           tone === "destructive"
             ? "text-destructive"
             : tone === "success"
