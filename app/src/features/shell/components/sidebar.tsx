@@ -9,8 +9,10 @@ interface SidebarProps {
   monitors: Monitor[];
 }
 
-// The fixed 212px sidebar: wordmark over the eyebrow, navigation, and the
-// check-interval summary + theme switch + sign-out pinned to the bottom edge.
+// The inset 212px sidebar: it sits directly on the shell background (no panel of
+// its own — the main column is the floating card) with wordmark over the eyebrow,
+// navigation, and the check-interval summary + theme switch + sign-out pinned to
+// its bottom edge.
 export function Sidebar({ monitors }: SidebarProps) {
   const intervals = monitors.map((monitor) => monitor.intervalSeconds).filter(Boolean);
   const summary = intervals.length
@@ -18,7 +20,7 @@ export function Sidebar({ monitors }: SidebarProps) {
     : "No monitors yet";
 
   return (
-    <nav className="flex w-53 shrink-0 flex-col border-r border-border bg-sidebar py-5">
+    <nav className="flex w-53 shrink-0 flex-col py-5">
       <div className="px-5 pb-5.5">
         <Wordmark />
       </div>
