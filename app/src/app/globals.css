@@ -2,6 +2,10 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* `dark:` follows the chosen theme: next-themes puts `.dark` on <html>, and
+   Tailwind 4 would otherwise key the variant off the OS preference alone. */
+@custom-variant dark (&:is(.dark *));
+
 /* Pulse — the "Lyra" theme: a terminal that happens to have a layout. Dense, a
    near-black canvas and one slate-teal accent. The type system is split: Space
    Grotesk for body/UI text, JetBrains Mono (tabular) for headings and numbers.
