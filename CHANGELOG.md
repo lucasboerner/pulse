@@ -1,3 +1,18 @@
+## 0.2.0 (September 20, 2026)
+  - feat(incidents): open an incident's details in a dialog
+  - docs: show the overview and a monitor detail in the README
+  - feat(monitor): read a day or a bucket by hovering the charts
+  - feat(shell): lay the screens out for phones
+  - fix(shell): stop the theme switch flashing dark on load
+  - feat(shell): toggle the theme with the d key
+  - refactor(shell): drop the check-interval summary from the sidebar
+  - feat(monitor): prefill a new monitor's timeout with 2s
+  - feat(ui): round the input, select trigger and recipients list
+  - feat(shell): inset the sidebar, float the main column
+  - test(history): keep the raw tail on today's strip cell
+  - feat(selfhost): run several instances on one host
+  - feat(selfhost): install behind an existing Traefik with one script
+
 ## 0.1.0 (September 19, 2026)
   - chore(release): add a ./tag script that cuts version tags
   - style(login): render the sign-in panel as a Card
