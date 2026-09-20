@@ -16,6 +16,11 @@ export default async function OverviewPage() {
     getCurrentUsername(),
   ]);
   const currentUserId = users.find((user) => user.username === username)?.id ?? null;
+  // A Server Component renders once per request, so a single request-time clock is
+  // stable; it is threaded into the live surface so SSR and hydration match and an
+  // ongoing incident's duration agrees.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
 
   return (
     <>
@@ -28,7 +33,7 @@ export default async function OverviewPage() {
         {metrics.monitorsTotal === 0 ? (
           <MonitorEmptyState users={users} currentUserId={currentUserId} />
         ) : (
-          <OverviewLive metrics={metrics} />
+          <OverviewLive metrics={metrics} now={now} />
         )}
       </div>
     </>

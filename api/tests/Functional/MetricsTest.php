@@ -132,10 +132,13 @@ final class MetricsTest extends ApiTestCase
         $incidents = $attributes['recentIncidents'];
         $this->assertCount(3, $incidents);
         $this->assertSame('Up One', $incidents[0]['monitorName']);
+        // Each entry carries its monitor's id, so the overview can link back to it.
+        $this->assertSame((string) $up->getId(), $incidents[0]['monitorId']);
         $this->assertSame('down', $incidents[0]['severity']);
         $this->assertSame('Connection refused.', $incidents[0]['cause']);
         $this->assertNull($incidents[0]['endedAt']);
         $this->assertSame('Down One', $incidents[1]['monitorName']);
+        $this->assertSame((string) $down->getId(), $incidents[1]['monitorId']);
         $this->assertSame('HTTP 503.', $incidents[1]['cause']);
         // The oldest of the three is the resolved one, so it carries an end.
         $this->assertNotNull($incidents[2]['endedAt']);
