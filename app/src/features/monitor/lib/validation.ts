@@ -15,7 +15,7 @@ export const INTERVAL_OPTIONS = [
 // the reserved room for other check types is visible.
 export const CHECK_TYPE_OPTIONS = [{ value: "http", label: "HTTP" }] as const;
 
-export const DEFAULT_TIMEOUT_MS = 8000;
+export const DEFAULT_TIMEOUT_MS = 2000;
 
 const intervalValues = INTERVAL_OPTIONS.map((option) => option.value) as [
   string,
