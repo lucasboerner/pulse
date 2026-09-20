@@ -29,7 +29,7 @@ export function SubscriberField({ users, value, onChange }: SubscriberFieldProps
   }
 
   return (
-    <div className="flex max-h-40 flex-col overflow-y-auto border border-input">
+    <div className="flex max-h-40 flex-col overflow-y-auto rounded-md border border-input">
       {users.map((user) => {
         const selected = value.includes(user.id);
         return (
@@ -46,7 +46,7 @@ export function SubscriberField({ users, value, onChange }: SubscriberFieldProps
             </span>
             <span
               className={cn(
-                "flex size-4 shrink-0 items-center justify-center border",
+                "flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
                 selected ? "border-primary bg-primary text-primary-foreground" : "border-input",
               )}
             >
