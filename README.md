@@ -18,6 +18,21 @@ on the roadmap; nothing below promises a check type that does not exist yet.
 - **A 24-hour latency chart** and a **90-day status history** on every monitor.
 - **Monitor groups** to organise the fleet.
 
+## Screenshots
+
+The overview: every monitor with its 90-day status strip, the fleet's 24-hour latency,
+and the newest incidents.
+
+![The Pulse overview, listing seven monitors with status strips, a response-time chart and recent incidents](docs/screenshots/overview.png)
+
+A monitor's detail page: the uptime windows, the 90-day strip, the 24-hour latency chart,
+the raw check log, the configuration and the outage history.
+
+![A Pulse monitor detail page, showing uptime figures, a status history strip, a latency chart, recent checks and incident history](docs/screenshots/monitor-detail.png)
+
+Both are the demonstration fleet that `doctrine:fixtures:load` seeds — see
+[Development](#development).
+
 ## Quickstart
 
 You need a VPS with **Docker Engine, the Compose plugin, and the Traefik you already
