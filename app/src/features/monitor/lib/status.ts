@@ -127,6 +127,30 @@ export function formatUtcTimestamp(iso: string | null): string {
 }
 
 /**
+ * The clock half of `formatUtcTimestamp` — `04:30 UTC`. The response chart's
+ * buckets all fall inside one 24-hour window, so the date would be noise.
+ */
+export function formatUtcTime(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const hours = String(date.getUTCHours()).padStart(2, "0");
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${hours}:${minutes} UTC`;
+}
+
+/**
+ * A status strip day in the incident log's style — `14 SEP 2025` from `2025-09-14`.
+ * Split by hand rather than through `Date`: a bare date parses as UTC midnight, so
+ * every day west of Greenwich would render as the day before.
+ */
+export function formatDayLabel(day: string): string {
+  const [year, month, date] = day.split("-").map(Number);
+  if (!year || !month || !date || month < 1 || month > 12) return day;
+  return `${String(date).padStart(2, "0")} ${MONTHS[month - 1]} ${year}`;
+}
+
+/**
  * A compact duration from a count of seconds — `45s`, `6m 12s`, `2h 5m`, `1d 3h`.
  * Two units at most; the largest two that apply.
  */
