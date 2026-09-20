@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 
 import { Switch } from "@/components/ui/switch";
@@ -25,6 +25,26 @@ export function ThemeSwitch() {
   // resolved theme takes over (suppressHydrationWarning on <html> covers the gap).
   const isDark = mounted ? resolvedTheme === "dark" : true;
 
+  // `d` flips the theme from anywhere in the shell — but never while the caret sits
+  // in a field, so typing a "d" into a monitor name cannot repaint the interface.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "d" && event.key !== "D") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+      setTheme(resolvedTheme === "dark" ? "light" : "dark");
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [resolvedTheme, setTheme]);
+
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground">
@@ -34,6 +54,7 @@ export function ThemeSwitch() {
         checked={isDark}
         onCheckedChange={(value) => setTheme(value ? "dark" : "light")}
         aria-label="Toggle dark mode"
+        aria-keyshortcuts="d"
       />
     </div>
   );
