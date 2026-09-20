@@ -8,7 +8,7 @@ interface MonitorListProps {
 export function MonitorList({ monitors }: MonitorListProps) {
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
         <span className="text-[15px] font-semibold">All Systems</span>
         <span className="font-mono text-[12px] tabular-nums text-muted-foreground">
           {monitors.length} {monitors.length === 1 ? "monitor" : "monitors"}

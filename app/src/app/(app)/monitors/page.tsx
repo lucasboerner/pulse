@@ -31,9 +31,9 @@ export default async function MonitorsPage() {
         title="Monitors"
         subtitle="Every target and its current state."
         updatedLabel={updatedLabel}
-        action={<NewMonitorButton users={users} currentUserId={currentUserId} />}
+        action={<NewMonitorButton users={users} currentUserId={currentUserId} compact />}
       />
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <MonitorsTable
           monitors={monitors}
           users={users}

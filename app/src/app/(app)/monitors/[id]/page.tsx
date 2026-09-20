@@ -67,10 +67,10 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
             </Link>
           </Button>
         }
-        action={<NewMonitorButton users={users} currentUserId={currentUserId} />}
+        action={<NewMonitorButton users={users} currentUserId={currentUserId} compact />}
       />
 
-      <div className="flex flex-col gap-5 p-6">
+      <div className="flex flex-col gap-4 p-4 sm:gap-5 sm:p-6">
         <MonitorDetailLive
           monitor={monitor}
           users={users}
@@ -80,8 +80,8 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
 
         <MonitorDetailStats history={history} />
 
-        <div className="grid grid-cols-1 gap-5 min-[1100px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-          <div className="flex min-w-0 flex-col gap-5">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 min-[1100px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
             <StatusHistoryCard days={history.dailyStatus} />
 
             <Card>
@@ -105,7 +105,7 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
             </Card>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-5">
+          <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
             <MonitorConfigurationCard
               monitor={monitor}
               users={users}
