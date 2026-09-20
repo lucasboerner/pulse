@@ -112,7 +112,11 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
               currentUserId={currentUserId}
             />
             <SloBudgetCard uptimeRatio30d={history.uptimeRatio30d} />
-            <IncidentHistoryCard incidents={incidents} now={now} />
+            <IncidentHistoryCard
+              incidents={incidents}
+              monitorName={monitor.name}
+              now={now}
+            />
           </div>
         </div>
       </div>

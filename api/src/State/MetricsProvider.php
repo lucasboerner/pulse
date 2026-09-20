@@ -242,13 +242,14 @@ final readonly class MetricsProvider implements ProviderInterface
     }
 
     /**
-     * @return list<array{monitorName: string, severity: string, startedAt: \DateTimeImmutable, endedAt: \DateTimeImmutable|null, cause: string|null}>
+     * @return list<array{monitorId: string, monitorName: string, severity: string, startedAt: \DateTimeImmutable, endedAt: \DateTimeImmutable|null, cause: string|null}>
      */
     private function recentIncidents(): array
     {
         $incidents = [];
         foreach ($this->incidents->findRecent(self::RECENT_INCIDENT_LIMIT) as $incident) {
             $incidents[] = [
+                'monitorId' => (string) $incident->getMonitor()->getId(),
                 'monitorName' => $incident->getMonitor()->getName(),
                 'severity' => $incident->getSeverity()->value,
                 'startedAt' => $incident->getStartedAt(),

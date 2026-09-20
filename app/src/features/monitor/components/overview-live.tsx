@@ -9,13 +9,16 @@ import { OverviewIncidentsCard } from "@/features/monitor/components/overview-in
 
 interface OverviewLiveProps {
   metrics: MetricsSummary;
+  /** The request-time clock, threaded on to the incident feed so an ongoing
+   *  incident's duration agrees on server and client. */
+  now: number;
 }
 
 // The overview's live surface: the "All Systems" rows read the server-delivered
 // rollups merged with any live status the Mercure listener has pushed, so a check
 // result flips a dot and its badge in place. The aggregate stat/response/incident
 // figures stay authoritative from the server render.
-export function OverviewLive({ metrics }: OverviewLiveProps) {
+export function OverviewLive({ metrics, now }: OverviewLiveProps) {
   const monitors = useLiveRollups(metrics.monitors);
 
   return (
@@ -25,7 +28,7 @@ export function OverviewLive({ metrics }: OverviewLiveProps) {
         <MonitorList monitors={monitors} />
         <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
           <OverviewResponseCard avgResponseMs={metrics.avgResponseMs} series={metrics.responseSeries} />
-          <OverviewIncidentsCard incidents={metrics.recentIncidents} />
+          <OverviewIncidentsCard incidents={metrics.recentIncidents} now={now} />
         </div>
       </div>
     </>

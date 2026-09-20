@@ -99,8 +99,26 @@ export interface MonitorRollup {
  * One entry in the overview's recent-incidents feed. `endedAt` null means the
  * incident is still open; a null top-level attribute would flatten to undefined,
  * but this rides inside an array so it stays null — still, compare with `== null`.
+ * `monitorId` is the owning monitor's UUID, so the feed can link back to it.
  */
 export interface IncidentSummary {
+  monitorId: string;
+  monitorName: string;
+  severity: IncidentSeverity;
+  startedAt: string;
+  endedAt: string | null;
+  cause: string | null;
+}
+
+/**
+ * One incident as the detail dialog reads it — the common denominator of the
+ * overview's `IncidentSummary` and the detail page's full `Incident`, which carry
+ * the monitor's name and its id respectively. `monitorId` is null when the
+ * incident is already shown on that monitor's own page, which suppresses the
+ * dialog's link back to it.
+ */
+export interface IncidentDetail {
+  monitorId: string | null;
   monitorName: string;
   severity: IncidentSeverity;
   startedAt: string;

@@ -97,9 +97,11 @@ class MetricsResource
     public array $monitors = [];
 
     /**
-     * The recent-incident feed, newest first, capped at a handful.
+     * The recent-incident feed, newest first, capped at a handful. Each entry carries
+     * its monitor's id as well as its name, so the overview can link an incident back
+     * to the monitor it belongs to.
      *
-     * @var list<array{monitorName: string, severity: string, startedAt: \DateTimeImmutable, endedAt: \DateTimeImmutable|null, cause: string|null}>
+     * @var list<array{monitorId: string, monitorName: string, severity: string, startedAt: \DateTimeImmutable, endedAt: \DateTimeImmutable|null, cause: string|null}>
      */
     #[Groups(['metrics:read'])]
     public array $recentIncidents = [];
