@@ -36,11 +36,12 @@ router to yours. Nothing else is installed on the host; the images ship everythi
    bash install.sh
    ```
 
-   Eight questions, seven of them with a default you accept with Enter:
+   Nine questions, eight of them with a default you accept with Enter:
 
    | Prompt | Where the answer comes from | Default |
    |---|---|---|
    | Public hostname | the `A` record from step 1 | — |
+   | Instance name | compose project + Traefik router name; only matters with more than one instance | first label of the hostname |
    | Docker network Traefik reads | `docker network ls` — the one your other routed containers sit on | `traefik` |
    | Https entrypoint | Traefik's static config, `entryPoints:` — the one on `:443` | `websecure` |
    | Certificate resolver | Traefik's static config, `certificatesResolvers:` | `letsencrypt` |
@@ -59,7 +60,7 @@ router to yours. Nothing else is installed on the host; the images ship everythi
    ```
 
    No `-f` flags are needed: the generated `.env` sets `COMPOSE_FILE` to both compose
-   files and pins the project name to `pulse`. First boot waits for PostgreSQL, generates
+   files and pins the project name to the instance name. First boot waits for PostgreSQL, generates
    the JWT signing keys, and applies the database migrations before the API reports
    healthy.
 
@@ -90,8 +91,9 @@ server-side — and **the Mercure hub needs no rule of its own** either, because
 frontend streams live updates same-origin through its own `/mercure` route. That is a
 real simplification: most comparable projects make you add a rule for the hub.
 
-The stack's own host ports (`3000`, `8080`, `3001`) are bound to `127.0.0.1` by the
-installer, so nothing but the proxy and a local shell can reach them.
+The stack's own host ports (`3000`, `8080`, `3001` by default) are bound to `127.0.0.1`
+by the installer, so nothing but the proxy and a local shell can reach them. The installer
+probes for free ports, so a second instance gets its own.
 
 Three things worth knowing:
 
@@ -102,6 +104,32 @@ Three things worth knowing:
 - Do not put a `compress` middleware on this router — `/mercure` is a long-lived
   `text/event-stream` that must not be buffered or transformed.
 
+### Several instances on one host
+
+Run the installer again in a **different directory** and answer with the other hostname.
+Nothing is shared: each instance gets its own containers, volumes, network and database,
+and the installer keeps the two apart on the three things that would otherwise collide.
+
+| Collides | Kept apart by |
+|---|---|
+| Container, volume and network names | `COMPOSE_PROJECT_NAME` — the instance name |
+| Traefik router and service name | `PULSE_ROUTER` — the instance name. Two containers labelling the same router name conflict inside Traefik. |
+| Loopback debug ports | `APP_PORT` / `API_PORT` / `MERCURE_PORT`, probed for free at install time |
+
+```bash
+mkdir -p /opt/pulse-status && cd /opt/pulse-status
+curl -fsSLO https://raw.githubusercontent.com/lucasboerner/pulse/main/install.sh
+bash install.sh          # hostname: status.example.com → instance: status
+docker compose up -d
+```
+
+The port probe sees only what is listening *right now*: if a sibling stack happens to be
+stopped, its ports look free and `up` will later report a bound port. Bump the three
+`*_PORT` values in that `.env` by hand if that happens.
+
+Upgrading an instance installed before this existed? Add `PULSE_ROUTER=<project name>` to
+its `.env` — without it both stacks label their router `pulse` and Traefik keeps one.
+
 ## Configuration
 
 `install.sh` writes every variable below into `.env`. Edit that file by hand only to
@@ -110,6 +138,7 @@ change something afterwards, then `docker compose up -d` to apply it.
 | Variable | Required | Default | What it does |
 |---|---|---|---|
 | `PULSE_HOST` | yes | — | Public hostname the Traefik router matches. |
+| `PULSE_ROUTER` | no | `pulse` | Name of the Traefik router and service. Must be unique per stack — see [Several instances on one host](#several-instances-on-one-host). |
 | `TRAEFIK_NETWORK` | yes | `traefik` | External docker network Traefik reads. |
 | `TRAEFIK_ENTRYPOINT` | yes | `websecure` | Name of Traefik's https entrypoint. |
 | `TRAEFIK_CERTRESOLVER` | yes | `letsencrypt` | Name of Traefik's certificate resolver. |
@@ -124,7 +153,7 @@ change something afterwards, then `docker compose up -d` to apply it.
 | `DEFAULT_URI` | yes | — | Base URL for links built off-request (CLI/worker contexts). |
 | `MERCURE_JWT_SECRET` | yes | — | Signs and validates the live-update tokens. Generated with `openssl rand -hex 32`. |
 | `COMPOSE_FILE` | no | *(both files)* | Lets every `docker compose` command run without `-f` flags. |
-| `COMPOSE_PROJECT_NAME` | no | `pulse` | Keeps container and volume names independent of the directory name. |
+| `COMPOSE_PROJECT_NAME` | no | *(instance name)* | Keeps container and volume names independent of the directory name, and separate from a second instance's. |
 | `IMAGE_TAG` | no | `latest` | Which published image tag to pull. |
 | `APP_PORT` | no | `127.0.0.1:3000` | Host binding for the frontend. Traefik reaches it over the docker network instead. |
 | `API_PORT` | no | `127.0.0.1:8080` | Host binding for the API — local debugging only. |

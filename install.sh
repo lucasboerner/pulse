@@ -12,6 +12,10 @@
 # It writes files and starts nothing. The last thing it prints is the command
 # that brings the stack up.
 #
+# Running it again in a *different* directory gives a second, independent
+# instance on the same host: it asks for an instance name (compose project +
+# traefik router) and picks host ports nothing is listening on yet.
+#
 # Flags:
 #   --no-download   use the compose files already in this directory
 #   --force         overwrite an existing .env (the old one is backed up)
@@ -35,6 +39,16 @@ done
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 die() { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
+
+# port_in_use PORT — true when something on this host already listens there.
+port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1; }
+
+# free_port BASE — the first port at or above BASE that nothing answers on.
+free_port() {
+  local p=$1
+  while port_in_use "$p"; do p=$((p + 1)); done
+  printf '%s' "$p"
+}
 
 # ── Preflight ───────────────────────────────────────────────────────────────
 
@@ -93,6 +107,19 @@ case "$PULSE_HOST" in
   *) die "\"$PULSE_HOST\" does not look like a hostname." ;;
 esac
 
+# The instance name is both the compose project name (container, volume and
+# network prefix) and the traefik router name. Two Pulse stacks on one host must
+# differ in both or they collide — same volumes, or one router silently winning
+# over the other. Defaults to the first label of the hostname.
+sanitize() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-'; }
+echo
+ask INSTANCE "Instance name (compose project + traefik router)" "$(sanitize "${PULSE_HOST%%.*}")"
+INSTANCE=$(sanitize "$INSTANCE")
+case "$INSTANCE" in
+  [a-z0-9]*) : ;;
+  *) die "the instance name must start with a letter or a digit." ;;
+esac
+
 echo
 echo "Traefik — the proxy already running on this server."
 ask TRAEFIK_NETWORK "  Docker network Traefik reads" "traefik"
@@ -114,6 +141,14 @@ echo
 echo "Database — runs in a container on this host, credentials never leave it."
 ask POSTGRES_DB "  Database name" "pulse"
 ask POSTGRES_USER "  Database user" "pulse"
+
+# ── Host ports ──────────────────────────────────────────────────────────────
+
+# Only local debugging binds these, so any free port will do — but a second
+# instance must not reuse the first one's, hence the probe.
+APP_PORT_N=$(free_port 3000)
+MERCURE_PORT_N=$(free_port $((APP_PORT_N + 1)))
+API_PORT_N=$(free_port 8080)
 
 # ── Generated secrets ───────────────────────────────────────────────────────
 
@@ -138,8 +173,9 @@ CORS_HOST=${PULSE_HOST//./\\.}
 
 # ── Compose ─────────────────────────────────────────────────────────────────
 # Pins the project name, so volume and container names do not depend on what
-# this directory happens to be called.
-COMPOSE_PROJECT_NAME=pulse
+# this directory happens to be called — and so a second instance on this host
+# keeps its own containers, volumes and network.
+COMPOSE_PROJECT_NAME=$INSTANCE
 COMPOSE_FILE=compose.selfhost.yaml:compose.traefik.yaml
 
 # ── Public identity ─────────────────────────────────────────────────────────
@@ -149,6 +185,9 @@ DEFAULT_URI=https://$PULSE_HOST
 CORS_ALLOW_ORIGIN=^https://$CORS_HOST$
 
 # ── Traefik (already running on this host) ──────────────────────────────────
+# PULSE_ROUTER names the router and the service. It must be unique per stack:
+# two containers labelling the same router name conflict inside Traefik.
+PULSE_ROUTER=$INSTANCE
 TRAEFIK_NETWORK=$TRAEFIK_NETWORK
 TRAEFIK_ENTRYPOINT=$TRAEFIK_ENTRYPOINT
 TRAEFIK_CERTRESOLVER=$TRAEFIK_CERTRESOLVER
@@ -168,10 +207,12 @@ MAILER_FROM=$MAILER_FROM
 
 # ── Host ports ──────────────────────────────────────────────────────────────
 # Traefik reaches the containers over the docker network, so these published
-# ports exist only for local debugging and stay bound to loopback.
-APP_PORT=127.0.0.1:3000
-API_PORT=127.0.0.1:8080
-MERCURE_PORT=127.0.0.1:3001
+# ports exist only for local debugging and stay bound to loopback. They were
+# probed for free when this file was written — a sibling stack that happened to
+# be stopped then looks free, so check these if \`up\` reports a bound port.
+APP_PORT=127.0.0.1:$APP_PORT_N
+API_PORT=127.0.0.1:$API_PORT_N
+MERCURE_PORT=127.0.0.1:$MERCURE_PORT_N
 
 # ── Optional ────────────────────────────────────────────────────────────────
 # IMAGE_TAG=latest                # pin a release instead of tracking latest
@@ -181,7 +222,8 @@ ENV
 
 echo
 bold "Wrote $ENV_FILE"
-echo "  https://$PULSE_HOST · router on the \"$TRAEFIK_NETWORK\" network"
+echo "  https://$PULSE_HOST · instance \"$INSTANCE\" · router on the \"$TRAEFIK_NETWORK\" network"
+echo "  Loopback ports: app $APP_PORT_N · api $API_PORT_N · mercure $MERCURE_PORT_N"
 [ "$MAILER_DSN" = "null://null" ] && echo "  Alert mail is disabled (MAILER_DSN=null://null)."
 
 cat <<NEXT
