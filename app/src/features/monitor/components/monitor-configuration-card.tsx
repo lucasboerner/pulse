@@ -43,6 +43,10 @@ export function MonitorConfigurationCard({
       ? "status 200–299"
       : `status ${monitor.expectedStatusCode}`;
   const nextCheck = monitor.enabled ? relativeTime(monitor.nextCheckAt) : "paused";
+  const whileDown =
+    monitor.downIntervalSeconds == null
+      ? "same as interval"
+      : `every ${intervalLabel(monitor.downIntervalSeconds)}`;
 
   return (
     <Card>
@@ -58,6 +62,7 @@ export function MonitorConfigurationCard({
           </span>
         </ConfigRow>
         <ConfigRow label="Interval">every {intervalLabel(monitor.intervalSeconds)}</ConfigRow>
+        <ConfigRow label="While Down">{whileDown}</ConfigRow>
         <ConfigRow label="Timeout">{monitor.timeoutMs}ms</ConfigRow>
         <ConfigRow label="Expected">{expected}</ConfigRow>
         <ConfigRow label="Next Check">{nextCheck}</ConfigRow>

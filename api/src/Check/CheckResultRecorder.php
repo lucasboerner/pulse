@@ -6,6 +6,7 @@ namespace App\Check;
 
 use App\Entity\CheckResult;
 use App\Entity\Monitor;
+use App\Enum\CheckStatus;
 use App\Incident\IncidentEngine;
 use App\Incident\IncidentTransition;
 use App\Message\NotifyIncident;
@@ -22,7 +23,8 @@ use Symfony\Component\Messenger\MessageBusInterface;
  * next_check_at advances to the moment the check started plus one interval, or, when
  * that already lies in the past (a worker that was down, or a check slower than its
  * own interval), to now plus one interval, so a resumed worker never replays a
- * backlog of ticks.
+ * backlog of ticks. A failed check uses the monitor's down interval when it has one,
+ * so a recovery is seen without waiting out a long regular interval.
  */
 final readonly class CheckResultRecorder
 {
@@ -52,7 +54,7 @@ final readonly class CheckResultRecorder
             $monitor
                 ->setLastStatus($outcome->status)
                 ->setLastCheckedAt($checkedAt)
-                ->setNextCheckAt($this->nextCheckAt($monitor, $checkedAt));
+                ->setNextCheckAt($this->nextCheckAt($this->intervalSeconds($monitor, $outcome), $checkedAt));
 
             $transition = $this->incidentEngine->reconcile($monitor, $outcome, $checkedAt);
 
@@ -75,9 +77,18 @@ final readonly class CheckResultRecorder
         }
     }
 
-    private function nextCheckAt(Monitor $monitor, \DateTimeImmutable $checkedAt): \DateTimeImmutable
+    private function intervalSeconds(Monitor $monitor, CheckOutcome $outcome): int
     {
-        $interval = new \DateInterval(\sprintf('PT%dS', $monitor->getIntervalSeconds()));
+        if (CheckStatus::Up === $outcome->status) {
+            return $monitor->getIntervalSeconds();
+        }
+
+        return $monitor->getDownIntervalSeconds() ?? $monitor->getIntervalSeconds();
+    }
+
+    private function nextCheckAt(int $intervalSeconds, \DateTimeImmutable $checkedAt): \DateTimeImmutable
+    {
+        $interval = new \DateInterval(\sprintf('PT%dS', $intervalSeconds));
         $fromSchedule = $checkedAt->add($interval);
         $now = new \DateTimeImmutable();
 

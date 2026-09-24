@@ -11,6 +11,16 @@ export const INTERVAL_OPTIONS = [
   { value: "900", label: "Every 15m" },
 ] as const;
 
+// The interval while the last check failed. "same" is the unset state (the API's
+// null): a failing monitor keeps its regular interval. A Radix select item cannot
+// carry an empty value, hence the sentinel.
+export const SAME_AS_INTERVAL = "same";
+
+export const DOWN_INTERVAL_OPTIONS = [
+  { value: SAME_AS_INTERVAL, label: "Same as interval" },
+  ...INTERVAL_OPTIONS,
+] as const;
+
 // Only HTTP ships in version 1 — but it is a real select, not a hidden field, so
 // the reserved room for other check types is visible.
 export const CHECK_TYPE_OPTIONS = [{ value: "http", label: "HTTP" }] as const;
@@ -22,14 +32,21 @@ const intervalValues = INTERVAL_OPTIONS.map((option) => option.value) as [
   ...string[],
 ];
 
+const downIntervalValues = DOWN_INTERVAL_OPTIONS.map((option) => option.value) as [
+  string,
+  ...string[],
+];
+
 // One schema, two consumers: the client via zodResolver and the Server Action's
 // re-run. Field names match the API's `source.pointer` last segment so a 422 maps
-// straight back onto the field (name, url, intervalSeconds, timeoutMs).
+// straight back onto the field (name, url, intervalSeconds, downIntervalSeconds,
+// timeoutMs).
 export const monitorFormSchema = z.object({
   name: z.string().trim().min(1, "Name is required."),
   url: z.string().trim().min(1, "Host or URL is required."),
   checkType: z.enum(["http"]),
   intervalSeconds: z.enum(intervalValues),
+  downIntervalSeconds: z.enum(downIntervalValues),
   timeoutMs: z
     .string()
     .trim()
@@ -51,6 +68,7 @@ export function newMonitorDefaults(currentUserId: string | null): MonitorFormVal
     url: "",
     checkType: "http",
     intervalSeconds: "60",
+    downIntervalSeconds: SAME_AS_INTERVAL,
     timeoutMs: String(DEFAULT_TIMEOUT_MS),
     enabled: true,
     subscribers: currentUserId ? [currentUserId] : [],
@@ -60,11 +78,16 @@ export function newMonitorDefaults(currentUserId: string | null): MonitorFormVal
 /** Prefills the form from an existing monitor for the Edit modal. */
 export function monitorToFormValues(monitor: Monitor): MonitorFormValues {
   const interval = String(monitor.intervalSeconds);
+  const downInterval =
+    monitor.downIntervalSeconds == null ? SAME_AS_INTERVAL : String(monitor.downIntervalSeconds);
   return {
     name: monitor.name,
     url: monitor.url,
     checkType: "http",
     intervalSeconds: intervalValues.includes(interval) ? interval : "60",
+    downIntervalSeconds: downIntervalValues.includes(downInterval)
+      ? downInterval
+      : SAME_AS_INTERVAL,
     timeoutMs: String(monitor.timeoutMs),
     enabled: monitor.enabled,
     subscribers: monitor.subscribers,
@@ -73,12 +96,17 @@ export function monitorToFormValues(monitor: Monitor): MonitorFormValues {
 
 // FormValues → the API's JSON:API `attributes`. The check type is written as
 // `_type` (JSON:API reserves `type`); trims and integer coercion happen here.
+// "Same as interval" is written as an explicit null so an update clears it.
 export function toMonitorAttributes(values: MonitorFormValues): Record<string, unknown> {
   return {
     name: values.name.trim(),
     url: values.url.trim(),
     _type: values.checkType,
     intervalSeconds: Number.parseInt(values.intervalSeconds, 10),
+    downIntervalSeconds:
+      values.downIntervalSeconds === SAME_AS_INTERVAL
+        ? null
+        : Number.parseInt(values.downIntervalSeconds, 10),
     timeoutMs: Number.parseInt(values.timeoutMs, 10),
     enabled: values.enabled,
   };
