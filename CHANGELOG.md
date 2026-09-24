@@ -1,3 +1,6 @@
+## 0.3.0 (September 24, 2026)
+  - feat(monitor): recheck a failing monitor on its own down interval
+
 ## 0.2.0 (September 20, 2026)
   - feat(incidents): open an incident's details in a dialog
   - docs: show the overview and a monitor detail in the README
