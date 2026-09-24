@@ -185,6 +185,90 @@ final class MonitorTest extends ApiTestCase
         $this->assertViolationNamesField($response, 'timeoutMs');
     }
 
+    public function testDownIntervalBelowTheMinimumIsUnprocessable(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'operator']);
+        $token = $this->login($client, 'operator');
+
+        $response = $client->request('POST', '/api/monitors', $this->writeOptions($token, [
+            'data' => [
+                'type' => 'Monitor',
+                'attributes' => [
+                    'name' => 'Too frequent while down',
+                    'url' => 'https://down-interval.example.com',
+                    'type' => 'http',
+                    'intervalSeconds' => 60,
+                    'downIntervalSeconds' => 10,
+                    'timeoutMs' => 5000,
+                ],
+            ],
+        ]));
+
+        $this->assertResponseStatusCodeSame(422);
+        $this->assertViolationNamesField($response, 'downIntervalSeconds');
+    }
+
+    public function testTimeoutLargerThanTheDownIntervalIsUnprocessable(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'operator']);
+        $token = $this->login($client, 'operator');
+
+        $response = $client->request('POST', '/api/monitors', $this->writeOptions($token, [
+            'data' => [
+                'type' => 'Monitor',
+                'attributes' => [
+                    'name' => 'Slow check while down',
+                    'url' => 'https://down-timeout.example.com',
+                    'type' => 'http',
+                    'intervalSeconds' => 900,
+                    'downIntervalSeconds' => 15,
+                    'timeoutMs' => 20000,
+                ],
+            ],
+        ]));
+
+        $this->assertResponseStatusCodeSame(422);
+        $this->assertViolationNamesField($response, 'timeoutMs');
+    }
+
+    public function testDownIntervalIsWrittenAndCanBeCleared(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'operator']);
+        $token = $this->login($client, 'operator');
+
+        $created = $client->request('POST', '/api/monitors', $this->writeOptions($token, [
+            'data' => [
+                'type' => 'Monitor',
+                'attributes' => [
+                    'name' => 'Rechecked fast',
+                    'url' => 'https://down-roundtrip.example.com',
+                    'type' => 'http',
+                    'intervalSeconds' => 900,
+                    'downIntervalSeconds' => 30,
+                    'timeoutMs' => 8000,
+                ],
+            ],
+        ]));
+        $this->assertResponseStatusCodeSame(201);
+        $document = $created->toArray();
+        $this->assertSame(30, $document['data']['attributes']['downIntervalSeconds']);
+        $iri = $document['data']['id'];
+
+        // JSON:API omits a null attribute, so a cleared down interval is absent.
+        $patched = $client->request('PATCH', $iri, $this->writeOptions($token, [
+            'data' => [
+                'type' => 'Monitor',
+                'id' => $iri,
+                'attributes' => ['downIntervalSeconds' => null],
+            ],
+        ]));
+        $this->assertResponseStatusCodeSame(200);
+        $this->assertArrayNotHasKey('downIntervalSeconds', $patched->toArray()['data']['attributes']);
+    }
+
     public function testCollectionListsMonitorsAndExcludesSoftDeletedOnes(): void
     {
         $client = static::createClient();

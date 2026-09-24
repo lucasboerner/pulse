@@ -9,6 +9,7 @@ import {
   newMonitorDefaults,
   monitorToFormValues,
   INTERVAL_OPTIONS,
+  DOWN_INTERVAL_OPTIONS,
   CHECK_TYPE_OPTIONS,
   type MonitorFormValues,
 } from "@/features/monitor/lib/validation";
@@ -175,19 +176,47 @@ export function MonitorForm({
             />
           </div>
 
-          <FormField
-            control={form.control}
-            name="timeoutMs"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Timeout (ms)</FormLabel>
-                <FormControl>
-                  <Input inputMode="numeric" placeholder="8000" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="downIntervalSeconds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Interval While Down</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {DOWN_INTERVAL_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>Recheck sooner to catch the recovery.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="timeoutMs"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Timeout (ms)</FormLabel>
+                  <FormControl>
+                    <Input inputMode="numeric" placeholder="8000" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <FormField
             control={form.control}

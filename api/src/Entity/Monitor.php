@@ -54,6 +54,9 @@ class Monitor
     #[ORM\Column(type: Types::INTEGER, options: ['default' => 60])]
     private int $intervalSeconds = 60;
 
+    #[ORM\Column(type: Types::INTEGER, nullable: true)]
+    private ?int $downIntervalSeconds = null;
+
     #[ORM\Column(type: Types::INTEGER, options: ['default' => 8000])]
     private int $timeoutMs = 8000;
 
@@ -148,6 +151,18 @@ class Monitor
     public function setIntervalSeconds(int $intervalSeconds): self
     {
         $this->intervalSeconds = $intervalSeconds;
+
+        return $this;
+    }
+
+    public function getDownIntervalSeconds(): ?int
+    {
+        return $this->downIntervalSeconds;
+    }
+
+    public function setDownIntervalSeconds(?int $downIntervalSeconds): self
+    {
+        $this->downIntervalSeconds = $downIntervalSeconds;
 
         return $this;
     }

@@ -69,6 +69,39 @@ final class CheckResultRecorderTest extends KernelTestCase
         self::assertLessThanOrEqual($after->modify('+60 seconds'), $monitor->getNextCheckAt());
     }
 
+    public function testAFailedCheckIsScheduledOnTheDownInterval(): void
+    {
+        self::bootKernel();
+        $monitor = MonitorFactory::createOne(['intervalSeconds' => 900, 'downIntervalSeconds' => 30]);
+        $checkedAt = new \DateTimeImmutable();
+
+        $this->recorder()->record($monitor, new CheckOutcome(CheckStatus::Down, null, null, 'unreachable'), $checkedAt);
+
+        self::assertEquals($checkedAt->modify('+30 seconds'), $monitor->getNextCheckAt());
+    }
+
+    public function testASuccessfulCheckKeepsTheRegularIntervalWhenADownIntervalIsSet(): void
+    {
+        self::bootKernel();
+        $monitor = MonitorFactory::createOne(['intervalSeconds' => 900, 'downIntervalSeconds' => 30]);
+        $checkedAt = new \DateTimeImmutable();
+
+        $this->recorder()->record($monitor, new CheckOutcome(CheckStatus::Up, 10, 200, null), $checkedAt);
+
+        self::assertEquals($checkedAt->modify('+900 seconds'), $monitor->getNextCheckAt());
+    }
+
+    public function testAFailedCheckWithoutADownIntervalKeepsTheRegularInterval(): void
+    {
+        self::bootKernel();
+        $monitor = MonitorFactory::createOne(['intervalSeconds' => 900]);
+        $checkedAt = new \DateTimeImmutable();
+
+        $this->recorder()->record($monitor, new CheckOutcome(CheckStatus::Down, null, null, 'unreachable'), $checkedAt);
+
+        self::assertEquals($checkedAt->modify('+900 seconds'), $monitor->getNextCheckAt());
+    }
+
     public function testItPublishesToBothTopicsWithTheIdentifierAndStatus(): void
     {
         self::bootKernel();

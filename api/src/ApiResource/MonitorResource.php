@@ -81,6 +81,10 @@ class MonitorResource
     public int $intervalSeconds = 60;
 
     #[Groups(['monitor:read', 'monitor:write'])]
+    #[Assert\GreaterThanOrEqual(15)]
+    public ?int $downIntervalSeconds = null;
+
+    #[Groups(['monitor:read', 'monitor:write'])]
     #[Assert\Positive]
     public int $timeoutMs = 8000;
 
@@ -127,14 +131,23 @@ class MonitorResource
 
     /**
      * A check may not outlive its own interval: the timeout, in milliseconds, must
-     * fit inside intervalSeconds. Expressed as a callback because it spans two
-     * fields, and reported against timeoutMs so the 422 names the field at fault.
+     * fit inside intervalSeconds, and inside downIntervalSeconds when one is set.
+     * Expressed as a callback because it spans fields, and reported against
+     * timeoutMs so the 422 names the field at fault.
      */
     #[Assert\Callback]
     public function validateTimeoutWithinInterval(ExecutionContextInterface $context): void
     {
         if ($this->timeoutMs > $this->intervalSeconds * 1000) {
             $context->buildViolation('The timeout must not exceed the interval (interval_seconds × 1000 milliseconds).')
+                ->atPath('timeoutMs')
+                ->addViolation();
+
+            return;
+        }
+
+        if (null !== $this->downIntervalSeconds && $this->timeoutMs > $this->downIntervalSeconds * 1000) {
+            $context->buildViolation('The timeout must not exceed the interval while down (down_interval_seconds × 1000 milliseconds).')
                 ->atPath('timeoutMs')
                 ->addViolation();
         }

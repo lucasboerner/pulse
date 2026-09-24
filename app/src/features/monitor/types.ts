@@ -16,13 +16,15 @@ export type CheckStatus = "up" | "down" | "degraded";
  * own check type arrives as `_type` over the wire and stays `_type` after
  * flattening. Relationships (`monitorGroup`, `subscribers`) are UUID strings.
  * `region`, `nextCheckAt`, `lastCheckedAt` and `lastStatus` are owned by the
- * check pipeline and are read-only here.
+ * check pipeline and are read-only here. `downIntervalSeconds` null means a
+ * failing monitor keeps its regular interval.
  */
 export interface Monitor extends ApiResource {
   name: string;
   url: string;
   _type: CheckType;
   intervalSeconds: number;
+  downIntervalSeconds: number | null;
   timeoutMs: number;
   expectedStatusCode: number | null;
   enabled: boolean;
