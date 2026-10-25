@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { connection } from "next/server";
 import "@/app/globals.css";
 import { cn } from "@/lib/utils";
+import { SENTRY_META, sentryConfigFromEnv } from "@/lib/sentry";
 import { Providers } from "@/components/providers";
 import React from "react";
 
@@ -26,9 +28,14 @@ export const metadata: Metadata = {
   description: "Self-hosted uptime monitoring for domains and the services attached to them.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // The Sentry config is the container's, not the build machine's: wait for a request
+  // before reading it, so no page is prerendered with whatever the build saw.
+  await connection();
+  const sentry = sentryConfigFromEnv();
+
   return (
     // suppressHydrationWarning is required by next-themes: it writes the theme
     // class onto <html> before React hydrates, so server and client markup differ
@@ -39,6 +46,15 @@ export default function RootLayout({
       className={cn("h-full", "antialiased", "font-sans", sans.variable, mono.variable)}
     >
       <body className="min-h-full flex flex-col">
+        {/* Opt-in error reporting: instrumentation-client.ts initialises Sentry in the
+            browser only when it finds these. React hoists them into <head>. */}
+        {sentry && (
+          <>
+            <meta name={SENTRY_META.dsn} content={sentry.dsn} />
+            <meta name={SENTRY_META.environment} content={sentry.environment} />
+            <meta name={SENTRY_META.release} content={sentry.release} />
+          </>
+        )}
         <Providers>{children}</Providers>
       </body>
     </html>

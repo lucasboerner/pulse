@@ -82,6 +82,7 @@ Global UI **must not** import from `features/` or `app/`. It may import from
 | `src/lib/api/actions.ts` | `"use server"` writes. Zod re-validation → POST/PATCH → `revalidatePath`. Returns `ActionResult<T>` with `data`/`error`/`fieldErrors`. |
 | `src/types/api.ts` | `ApiResource`, `JsonApiCollection<T>`, `JsonApiError` — shared by every domain. |
 | `src/lib/utils.ts` | `cn()` — the only utility to reach for when composing conditional Tailwind classes. |
+| `src/lib/sentry.ts` | Opt-in error reporting. The runtime config (`SENTRY_APP_DSN`) and the init options shared by `src/instrumentation.ts` (server, edge) and `src/instrumentation-client.ts` (browser, which reads the config from meta tags the root layout renders). |
 
 ## Why this shape
 

@@ -160,6 +160,11 @@ services:
       # Signs the subscribe-only capability token the proxy attaches server-side;
       # must match the hub's keys (mercure service below).
       MERCURE_JWT_SECRET: ${MERCURE_JWT_SECRET}
+      # Opt-in error reporting, server and browser (app/src/lib/sentry.ts). Its own
+      # DSN: JavaScript belongs in a different Sentry project than the API's PHP.
+      # Read at runtime, so the published image needs no rebuild. Empty = off.
+      SENTRY_APP_DSN: ${SENTRY_APP_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
     depends_on:
       api:
         condition: service_healthy

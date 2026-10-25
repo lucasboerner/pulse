@@ -39,6 +39,12 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# The Sentry release every event carries, server and browser (the root layout hands
+# it to the page) — pulse@X.Y.Z, the same name the API reports. publish.yml passes
+# the tag's version; a local build reports pulse@dev.
+ARG VERSION=dev
+ENV SENTRY_RELEASE=pulse@${VERSION}
+
 # Unprivileged, matching the hardened API image (which runs as www-data).
 USER node
 

@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -10,8 +11,11 @@ interface ErrorProps {
 
 export default function Error({ error, reset }: ErrorProps) {
   useEffect(() => {
-    // Wire your error reporter here (the digest identifies the server-side log line).
     console.error(error);
+    // A digest marks an error thrown on the server, which onRequestError already
+    // reported (instrumentation.ts) — the browser only sees its redacted copy. Report
+    // what failed in the browser. A no-op while Sentry is off.
+    if (!error.digest) Sentry.captureException(error);
   }, [error]);
 
   return (
