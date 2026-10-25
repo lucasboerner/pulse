@@ -1,3 +1,6 @@
+## 0.3.1 (Oktober 25, 2026)
+  - fix(api): build on PHP 8.4.27 to patch PHP2Shell
+
 ## 0.3.0 (September 24, 2026)
   - feat(monitor): recheck a failing monitor on its own down interval
 
