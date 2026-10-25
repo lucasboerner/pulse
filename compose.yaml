@@ -69,9 +69,17 @@ services:
     command: php bin/console messenger:consume async --time-limit=3600 -v
     # The image HEALTHCHECK probes Caddy's admin socket (:2019), which only
     # exists when the container runs frankenphp — a messenger:consume process
-    # would report unhealthy forever, so the check is disabled here.
-    healthcheck:
-      disable: true
+    # would report unhealthy forever. So this check asks whether PID 1 is the
+    # consumer instead: the entrypoint ends in `exec docker-php-entrypoint "$@"`,
+    # which execs the command, so the consumer replaces the shell as PID 1 and
+    # the container exits when it does. A real check (rather than
+    # `disable: true`) is what lets `docker compose up --wait` pass — Compose
+    # refuses to wait on a service whose healthcheck never reports a state.
+    healthcheck: &consumer-healthcheck
+      test: ["CMD", "grep", "-q", "messenger:consume", "/proc/1/cmdline"]
+      interval: 30s
+      start_period: 10s
+      start_interval: 2s
     volumes:
       - ./api:/app
 
@@ -92,8 +100,7 @@ services:
       <<: *api-env
       SKIP_MIGRATIONS: "1"
     command: php bin/console messenger:consume scheduler_default --time-limit=3600 -v
-    healthcheck:
-      disable: true # image HEALTHCHECK probes Caddy — see worker
+    healthcheck: *consumer-healthcheck # image HEALTHCHECK probes Caddy — see worker
     volumes:
       - ./api:/app
 
