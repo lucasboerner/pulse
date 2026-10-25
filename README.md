@@ -189,6 +189,26 @@ which rolls every generated secret. Changing `APP_SECRET` or the database passwo
 running instance means the stack can no longer read its own database, so edit `.env` by
 hand instead.
 
+### Error reporting (optional)
+
+Pulse can report its errors to Sentry. It is off by default: unless a DSN is set, no
+SDK starts and nothing leaves your server. `install.sh` does not ask about it — add the
+variables to `.env` and run `docker compose up -d`.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `SENTRY_DSN` | *(empty: off)* | DSN for the backend — `api`, `worker` and `scheduler`. Reports server errors and failed background jobs; 4xx responses are not reported. |
+| `SENTRY_APP_DSN` | *(empty: off)* | DSN for the frontend, server and browser. Its own project: PHP and JavaScript errors belong apart. |
+| `SENTRY_ENVIRONMENT` | `production` | The *Environment* every event is filed under, e.g. `staging`. |
+
+Any Sentry-compatible server works: sentry.io, self-hosted Sentry, GlitchTip or Bugsink.
+Every event names the release it came from (`pulse@X.Y.Z`, built into the images). Events
+carry no IP addresses, cookies, credentials or request bodies, and there is no session
+replay, feedback widget or performance tracing.
+
+The browser sends its errors straight to the host in `SENTRY_APP_DSN`. Pulse sets no
+Content Security Policy; if your proxy adds one, its `connect-src` must allow that host.
+
 ## Updating and backing up
 
 **Update** to a newer release by moving `IMAGE_TAG` (or leaving it at `latest`) and
@@ -200,6 +220,17 @@ docker compose up -d
 ```
 
 Database migrations run automatically when the `api` container boots the new image.
+
+`pull` updates the images, not the compose files `install.sh` fetched once. Current
+compose files give `worker` and `scheduler` a real healthcheck — older ones disabled it,
+so `docker compose up --wait` failed with *has no healthcheck configured* — and pass the
+[error-reporting](#error-reporting-optional) variables through. An older file keeps
+working; to get both, fetch the current one (carry over any edits you made to yours):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/lucasboerner/pulse/main/compose.selfhost.yaml
+docker compose up -d
+```
 
 **Back up** the two named volumes:
 
@@ -288,6 +319,25 @@ Two one-time steps must be done by hand:
   `openssl rand -base64 32`. It keeps Next.js Server Action IDs stable across releases so
   open browser tabs keep working after a redeploy. Without it the build still succeeds; it
   just churns those IDs between releases.
+
+**Optional: release tracking in Sentry.** Once set up, every tag run also creates the
+release `pulse@X.Y.Z` in both Sentry projects, attaches the commits since the previous
+release, uploads the frontend's source maps and finalizes the release — so *Resolve in
+next release* works for backend and frontend issues, and every issue shows the release it
+first and last appeared in. One-time setup:
+
+1. **Create two Sentry projects** — a PHP (Symfony) one for the API and a Next.js one for
+   the app.
+2. **Connect the Sentry GitHub integration to this repository.** `set-commits --auto` and
+   suspect commits read the commit history through it.
+3. **Create the `SENTRY_AUTH_TOKEN` repository secret** — a Sentry organization auth
+   token, which may create releases and upload source maps.
+4. **Create the repository variables** `SENTRY_ORG` (organization slug),
+   `SENTRY_PROJECT_API` and `SENTRY_PROJECT_APP` (the two project slugs).
+
+Without the secret and all three variables the workflow skips every Sentry step and
+publishes as before — a fork needs none of them. Deploy markers (`sentry-cli deploys new`)
+belong in your own deploy workflow, not here.
 
 ## Licence
 
