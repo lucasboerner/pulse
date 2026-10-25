@@ -155,7 +155,12 @@ COPY --from=frankenphp_prod_builder /etc/ssl/openssl.cnf /etc/ssl/openssl.cnf
 COPY --from=frankenphp_prod_builder /usr/bin/file /usr/bin/file
 COPY --from=frankenphp_prod_builder /usr/lib/file/magic.mgc /usr/lib/file/magic.mgc
 
-ENV  OPENSSL_CONF=/etc/ssl/openssl.cnf XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
+# SSL_CERT_FILE: PHP's OpenSSL looks for its CA bundle under /usr/lib/ssl/
+# (openssl_get_cert_locations()), which this slim image does not have — so every
+# TLS connection over PHP streams (SMTP STARTTLS for alert mail, NativeHttpClient,
+# https:// stream wrappers) failed with "certificate verify failed". libcurl
+# (CurlHttpClient, the monitor probes) has its own compiled-in path and was fine.
+ENV  OPENSSL_CONF=/etc/ssl/openssl.cnf SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
 
 # Create the FrankenPHP data/config dirs and the prod log dir up front, owned by
 # www-data so the app (running as www-data) can write to them at runtime.
