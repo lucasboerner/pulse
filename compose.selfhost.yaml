@@ -23,6 +23,12 @@
 # MERCURE_PORT (3001), IMAGE_TAG (latest), PULSE_RAW_RETENTION_DAYS (7),
 # POSTGRES_VERSION (16), POSTGRES_CHARSET (utf8). The JWT_* trio is optional too:
 # the api container generates a key pair on first boot (see README.md).
+#
+# Error reporting is opt-in and off by default: SENTRY_DSN (api, worker,
+# scheduler), SENTRY_APP_DSN (app, server and browser) and SENTRY_ENVIRONMENT
+# (production). With both DSNs empty no SDK initialises and nothing leaves the
+# host. Any Sentry-compatible server works (sentry.io, self-hosted, GlitchTip,
+# Bugsink).
 
 x-api-env: &api-env
   APP_ENV: prod
@@ -66,6 +72,11 @@ x-api-env: &api-env
   # elapsed hour into check_rollup (kept forever) and then deletes raw rows behind
   # this window. Widening it keeps more raw detail; rollups are unaffected.
   PULSE_RAW_RETENTION_DAYS: ${PULSE_RAW_RETENTION_DAYS:-7}
+  # Opt-in error reporting (api/config/packages/sentry.yaml). Empty DSN = off.
+  # The release (pulse@<version>) is baked into the image; 4xx responses are not
+  # reported, failed worker/scheduler messages are.
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
 
 services:
   api:

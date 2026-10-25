@@ -1,0 +1,43 @@
+sentry:
+    # Opt-in. Empty SENTRY_DSN (the default in .env) leaves the client without a
+    # DSN: its transport skips every event and nothing leaves the host. Any
+    # Sentry-compatible server works — sentry.io, self-hosted Sentry, GlitchTip,
+    # Bugsink. Never commit a DSN: .env is baked into the published image.
+    dsn: '%env(default::SENTRY_DSN)%'
+
+    # Errors only — no performance tracing. Disabling the node also skips the
+    # DBAL / cache / Twig / HttpClient instrumentation it would wrap around every
+    # call.
+    tracing:
+        enabled: false
+
+    # A failed message in the worker or scheduler consumer is reported once, when
+    # it is finally rejected (and lands on the failure transport) — not once per
+    # retry, which would only repeat the same event into the same issue.
+    messenger:
+        capture_soft_fails: false
+
+    options:
+        # The "Environment" facet. compose.selfhost.yaml defaults it to production.
+        environment: '%env(SENTRY_ENVIRONMENT)%'
+        # pulse@X.Y.Z, shared with the app's events, so "Resolve in next release"
+        # and first/last-seen release work across both projects. The prod image
+        # sets it from its build argument (ARG VERSION in api/Dockerfile); local
+        # and dev builds fall back to pulse@dev from .env.
+        release: '%env(SENTRY_RELEASE)%'
+        # A 4xx is the client's mistake, not a bug: an unknown route, a failed
+        # login, a validation error. See App\Sentry\IgnoreClientErrors.
+        before_send: App\Sentry\IgnoreClientErrors
+        # Never attach the client IP, cookies or the authenticated user. Set
+        # explicitly so the privacy stance is visible here, not left to a default.
+        send_default_pii: false
+        # Request bodies are attached independently of send_default_pii — a 5xx
+        # during POST /api/login would otherwise carry the plaintext password.
+        max_request_body_size: none
+
+when@test:
+    sentry:
+        # Never initialise a transport in the suite, whatever the shell exports.
+        dsn: ~
+        register_error_listener: false
+        register_error_handler: false

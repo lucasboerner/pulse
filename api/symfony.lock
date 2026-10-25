@@ -133,6 +133,9 @@
     "ramsey/uuid-doctrine": {
         "version": "2.1.0"
     },
+    "sentry/sentry-symfony": {
+        "version": "5.14.0"
+    },
     "stof/doctrine-extensions-bundle": {
         "version": "v1.15.3"
     },

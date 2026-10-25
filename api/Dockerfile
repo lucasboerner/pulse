@@ -179,6 +179,13 @@ RUN chmod g=u /app/var
 
 COPY --link --chmod=755 frankenphp/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 
+# The Sentry release every event carries — pulse@X.Y.Z, the same name the app
+# reports, so one release spans both projects. publish.yml passes the tag's
+# version; a local build reports pulse@dev. Declared last so a new version only
+# rebuilds this metadata layer.
+ARG VERSION=dev
+ENV SENTRY_RELEASE=pulse@${VERSION}
+
 USER www-data
 
 WORKDIR /app
