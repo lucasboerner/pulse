@@ -1,3 +1,12 @@
+## 0.4.0 (October 25, 2026)
+  - docs(claude): note that the app bundle is built once on the build platform
+  - docs: document opt-in error reporting and Sentry release tracking
+  - ci(publish): track releases in Sentry with the app's source maps
+  - feat(app): report errors to Sentry when SENTRY_APP_DSN is set
+  - feat(api): report errors to Sentry when SENTRY_DSN is set
+  - fix(api): point PHP's OpenSSL at the CA bundle in the prod image
+  - fix(compose): give worker and scheduler a real healthcheck
+
 ## 0.3.1 (Oktober 25, 2026)
   - fix(api): build on PHP 8.4.27 to patch PHP2Shell
 
