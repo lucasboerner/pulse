@@ -13,6 +13,13 @@ name: Publish images
 # Images are built for linux/amd64 and linux/arm64 (self-hosters run on ARM VPS
 # instances and Apple Silicon). The arm64 half is emulated via QEMU and slow;
 # the GitHub Actions layer cache keeps reruns cheaper.
+#
+# Optional Sentry release tracking (README, "Releasing"): with the
+# SENTRY_AUTH_TOKEN secret and the SENTRY_ORG, SENTRY_PROJECT_API and
+# SENTRY_PROJECT_APP variables set, a tag run also creates release pulse@X.Y.Z in
+# both projects, associates its commits, uploads the app's source maps and
+# finalizes it. Without them every Sentry step is skipped — a fork publishes
+# unchanged. Deploy markers belong to the operator's own deploy workflow.
 on:
   push:
     tags:
@@ -28,9 +35,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Decides once whether this run tracks a Sentry release. Secrets cannot appear
+  # in an `if:`, so the check runs here and the other jobs read its output.
+  sentry:
+    name: Sentry release tracking
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check for the secret, the variables and a version tag
+        id: check
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT_API: ${{ vars.SENTRY_PROJECT_API }}
+          SENTRY_PROJECT_APP: ${{ vars.SENTRY_PROJECT_APP }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          if [ "$IS_TAG" = true ] && [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] \
+            && [ -n "$SENTRY_PROJECT_API" ] && [ -n "$SENTRY_PROJECT_APP" ]; then
+            echo enabled=true >> "$GITHUB_OUTPUT"
+          else
+            echo enabled=false >> "$GITHUB_OUTPUT"
+            echo "::notice::Sentry release tracking skipped: it needs a v* tag, the SENTRY_AUTH_TOKEN secret and the SENTRY_ORG, SENTRY_PROJECT_API and SENTRY_PROJECT_APP variables."
+          fi
+
   publish:
     name: ${{ matrix.image }}
+    needs: sentry
     runs-on: ubuntu-latest
+    outputs:
+      # X.Y.Z (or X.Y.Z-rc.N), the same in both legs.
+      version: ${{ steps.meta.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -80,6 +116,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Becomes SENTRY_RELEASE=pulse@<version> in both images, so every event
+          # names the release it came from.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           # A clean multi-arch index without provenance attestations, so the
           # package page shows only the two real platforms.
           provenance: false
@@ -92,3 +132,92 @@ jobs:
           # between releases (open tabs break after a redeploy). Create it with
           # `openssl rand -base64 32`; see the README release section.
           secrets: ${{ (matrix.image == 'pulse-app' && secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY != '') && format('next_actions_key={0}', secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY) || '' }}
+
+      # pulse-app, Sentry runs only: export the bundle's source maps from the same
+      # build (app/Dockerfile, `sourcemaps` stage). Its builder stage ran once, on
+      # the runner's own platform, for both architectures above, so this is a
+      # cache hit, not a second `next build` — and one upload covers both images.
+      - name: Export the app's source maps
+        if: matrix.image == 'pulse-app' && needs.sentry.outputs.enabled == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          target: sourcemaps
+          outputs: type=local,dest=sourcemaps
+          cache-from: type=gha,scope=pulse-app
+          secrets: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY != '' && format('next_actions_key={0}', secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY) || '' }}
+
+      # A rebuilt bundle would have new chunk names and debug IDs, and its maps
+      # would resolve nothing. Next.js gives every build a random ID, so equal IDs
+      # prove the maps belong to what was pushed — for both architectures.
+      - name: Check the source maps belong to the pushed images
+        if: matrix.image == 'pulse-app' && needs.sentry.outputs.enabled == 'true'
+        env:
+          IMAGE: ghcr.io/lucasboerner/pulse-app:${{ steps.meta.outputs.version }}
+        run: |
+          expected="$(cat sourcemaps/BUILD_ID)"
+          for platform in linux/amd64 linux/arm64; do
+            docker pull --quiet --platform "$platform" "$IMAGE" > /dev/null
+            container="$(docker create --platform "$platform" "$IMAGE")"
+            actual="$(docker cp "$container:/app/.next/BUILD_ID" - | tar -xO)"
+            docker rm "$container" > /dev/null
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::$platform image has build $actual, the source maps are from $expected"
+              exit 1
+            fi
+          done
+
+      - name: Keep the source maps for the Sentry release job
+        if: matrix.image == 'pulse-app' && needs.sentry.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-sourcemaps
+          path: sourcemaps
+          if-no-files-found: error
+          retention-days: 1
+
+  # Runs after both images are published. One release name for the whole stack —
+  # Sentry releases are organization-wide — so "Resolve in next release" and the
+  # first/last-seen release work for API and app issues alike.
+  sentry-release:
+    name: Sentry release
+    needs: [sentry, publish]
+    if: needs.sentry.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT_API: ${{ vars.SENTRY_PROJECT_API }}
+      SENTRY_PROJECT_APP: ${{ vars.SENTRY_PROJECT_APP }}
+      RELEASE: pulse@${{ needs.publish.outputs.version }}
+    steps:
+      # Full history: set-commits reads HEAD and the remote from the checkout.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-sourcemaps
+          path: sourcemaps
+
+      - name: Install sentry-cli
+        run: npm install --global @sentry/cli@3.8.2
+
+      - name: Create the release in both projects
+        run: sentry-cli releases new "$RELEASE" --project "$SENTRY_PROJECT_API" --project "$SENTRY_PROJECT_APP"
+
+      # Needs the Sentry GitHub integration connected to this repository: Sentry
+      # resolves the commits since the previous release from it, which also feeds
+      # suspect commits.
+      - name: Associate the commits since the previous release
+        run: sentry-cli releases set-commits "$RELEASE" --auto
+
+      # Matched by debug ID, which the build wrote into every bundle and its map.
+      # The files keep their _next/... layout, so their default ~/_next/... names
+      # also match the browser's URLs.
+      - name: Upload the app's source maps
+        run: sentry-cli sourcemaps upload --release "$RELEASE" --project "$SENTRY_PROJECT_APP" sourcemaps
+
+      - name: Finalize the release
+        run: sentry-cli releases finalize "$RELEASE"
